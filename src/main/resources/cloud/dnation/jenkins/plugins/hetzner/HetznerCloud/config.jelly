@@ -1,0 +1,42 @@
+<!--
+     Copyright 2021 https://dnation.cloud
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:st="jelly:stapler">
+    <f:entry title="${%Name}" field="name">
+        <f:textbox default="hetzner"/>
+    </f:entry>
+    <f:entry field="instanceCapStr" title="${%Instance Cap}">
+        <f:textbox default="10"/>
+    </f:entry>
+    <f:entry field="credentialsId" title="${%Token}">
+        <c:select checkMethod="post"/>
+    </f:entry>
+    <f:advanced title="${%Server templates}" align="left">
+        <f:entry title="${%Server templates}"
+                 description="${%List of server templates that can be launched as Jenkins agents}">
+            <f:repeatable field="serverTemplates">
+                <st:include page="config.jelly" class="${descriptor.clazz}"/>
+                <f:block>
+                    <div align="right">
+                        <f:repeatableDeleteButton value="Delete server template"/>
+                    </div>
+                </f:block>
+            </f:repeatable>
+        </f:entry>
+    </f:advanced>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="verifyConfiguration"
+                      with="credentialsId"/>
+</j:jelly>
