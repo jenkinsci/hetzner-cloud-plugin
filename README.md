@@ -18,6 +18,18 @@
 
 The Hetzner cloud plugin enables [Jenkins CI](https://www.jenkins.io/) to schedule builds on dynamically provisioned VMs in [Hetzner Cloud](https://www.hetzner.com/cloud).
 
+## Installation
+
+### Installation from source
+
+- Clone this git repository
+- Build with maven `mvn clean package`
+- Open your Jenkins instance in browser (as Jenkins administrator)
+- Go to `Manage Jenkins`
+- Go to `Manage Plugins`
+- Click on `Advanced` tab
+- Under `Upload Plugin` section, click on `Choose file` button and select `target/hetzner-cloud.hpi` file
+- Jenkins server might require restart after plugin is installed
 
 ## Configuration
 
@@ -33,9 +45,13 @@ From Dashboard => Manage Jenkins => Manage credentials => Global => Add credenti
 
 From Dashboard => Manage Jenkins => Manage Nodes and Clouds => Configure Clouds => Add a new cloud
 
+Choose `Hetzner` from dropdown menu
+
 ![add-cloud-button](docs/add-hcloud-button.png)
 
 ![add-cloud](docs/add-cloud.png)
+
+You can use `Test Connection` button to verify that token is valid and that plugin can use Hetzner API.
 
 #### 3. Define server templates
 
@@ -85,6 +101,17 @@ jenkins:
             location: fsn1
             image: name=jenkins
             labelStr: java
+            numExecutors: 1
+            connector:
+              root:
+                sshCredentialsId: 'ssh-private-key'
+          - name: ubuntu2-cx31
+            serverType: cx31
+            remoteFs: /var/lib/jenkins
+            location: fsn1
+            image: name=jenkins
+            labelStr: java
+            numExecutors: 3
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
@@ -106,29 +133,7 @@ credentials:
                   privateKey: |
                     -----BEGIN OPENSSH PRIVATE KEY-----
                     b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABFwAAAAdzc2gtcn
-                    NhAAAAAwEAAQAAAQEAyMm0501e8CnMGO72c5fihC//KhdOGahgvbCGbS5mOk4zfpvo+Jui
-                    3hIJOOt6DW2atAabo8wUXLg9KH9cXHmKs6SMGuRd7m5fdTaUzO0G//ZmzX51phqSYv6JsU
-                    n/vKxqOeVtIWzXHuC+lOtEyR+BKA2UQJOTReO4dv8oAt9cBGSN4gOItc7s07ggK+ZD+S2u
-                    gSTpf5gXYnD9qq9TFuEyMFLJi9gWE/M3c/ZeeDyfTeVeYdbaq2qI3NNUtUYXB4Es0XsdzR
-                    ZSfMhPggJaw8jhlMYFnJE+8O2gJiWrvky1NYhouRD2QzdTCwDoG58AK2Epnd0wIE1iDAHU
-                    6ZVQaj1BawAAA8iwi+/UsIvv1AAAAAdzc2gtcnNhAAABAQDIybTnTV7wKcwY7vZzl+KEL/
-                    8qF04ZqGC9sIZtLmY6TjN+m+j4m6LeEgk463oNbZq0BpujzBRcuD0of1xceYqzpIwa5F3u
-                    bl91NpTM7Qb/9mbNfnWmGpJi/omxSf+8rGo55W0hbNce4L6U60TJH4EoDZRAk5NF47h2/y
-                    gC31wEZI3iA4i1zuzTuCAr5kP5La6BJOl/mBdicP2qr1MW4TIwUsmL2BYT8zdz9l54PJ9N
-                    5V5h1tqraojc01S1RhcHgSzRex3NFlJ8yE+CAlrDyOGUxgWckT7w7aAmJau+TLU1iGi5EP
-                    ZDN1MLAOgbnwArYSmd3TAgTWIMAdTplVBqPUFrAAAAAwEAAQAAAQEAhe/vad/1tZTcHcHB
-                    yqgFpRHzT1uOcJUeO0r20PwDm18xAIL2LGh9g09asYp6t1xmtzI1PlVTO+p2eX5D2TgGaw
-                    EXqJSvh+4+ZQ0Mw4pVggcW2ntB9ZSCE+Ehbo8jNfN5RLejTYmyElnvJ52tG9CVMmekflMz
-                    CYr3MQHR6eCfHBnbOgdMFiIyTgFliT1MAZBlWRtVJDQkr8DZMBjN1qoVHldLISl2nREvVt
-                    b6TM1gCCp3fuey6+pe5BOm5gn/FjxOXiOiBrmfAu0Wu5ITnblCeje9Y/z0dHJNgKxhKfuo
-                    hp78EE+fgHwVpUMeAunId9uRBwu8/u8eewtb7tMcYyK82QAAAIB8rhliWV/AOJqk+RhadS
-                    uF+640Zekk8dw0EFQiyYeK9IABi+WGs0+XTd3a0k/bUUM0jxxa2os1fSsnojOhMCYpLt5A
-                    UzmVWENG4xixscX0xdtJeYI91/Q7JuPmRbR2rGCL76WGyVnFvrKfpih1IgUKd9xkMT32WN
-                    yp/rSKab78sQAAAIEA/M+MJjP+v1bA/2efBD70Vp4JgtnrsHIP80ZQOWxVWT+4Ea17OlBR
-                    k+AfU1vJsrS9yLAk4LqHc3Zx6P3kd1sVvb9+dkIvQwy189T+sc7f4karRg9msu/aoAuzNE
-                    LsaI9VieYN2eF6ET243G8SUA6rKSCpvGDicVEjbbYI8PAaEE8AAACBAMtSJsXF2cFaWOrd
-                    pBYI3ZsseI9mlLXCX1Y+P/6QBo7U51/Vw0vLjLgyHyVGveLH26Fr0/b07QWoI3XQSXA3ZO
-                    asXVVgiyAEsUaqxEr0NsqACTfYA3reHcIFD/FthDRYh5a5sXzBtRHeqDhsmV0Vj42YAqq2
+                      ... truncated ...
                     baewZMKBL1QECTolAAAADHJrb3NlZ2lAbDQ4MAECAwQFBg==
                     -----END OPENSSH PRIVATE KEY-----
 ```
