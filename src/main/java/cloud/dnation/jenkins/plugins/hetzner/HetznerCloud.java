@@ -53,11 +53,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class HetznerCloud extends AbstractCloudImpl {
-    //TODO : remove
-    static {
-        System.setProperty(HetznerConstants.PROP_CLIENT_DEBUG, Boolean.TRUE.toString());
-    }
-
     @Getter
     private final String credentialsId;
     @Getter
@@ -96,7 +91,7 @@ public class HetznerCloud extends AbstractCloudImpl {
     }
 
     protected Object readResolve() {
-        resourceManager = new HetznerCloudResourceManager(credentialsId);
+        resourceManager = HetznerCloudResourceManager.create(credentialsId);
         if (serverTemplates != null) {
             for (HetznerServerTemplate template : serverTemplates) {
                 template.setCloud(this);

@@ -37,15 +37,7 @@ public class ClientFactory {
 
     private static final Gson GSON = new GsonBuilder().create();
 
-
-    /**
-     * Create new {@link Retrofit} object using token provider.
-     *
-     * @param tokenProvider supplier of Hetzner API token.
-     * @return Retrofit object
-     * @throws IllegalStateException when credentialsId is not valid
-     */
-    public static Retrofit create(Supplier<String> tokenProvider) {
+    private static HetznerApi create(String apiToken) {
         final boolean debug = Boolean.TRUE.toString().equals(System.getProperty(HetznerConstants.PROP_CLIENT_DEBUG,
                 Boolean.FALSE.toString()));
         final HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
@@ -54,7 +46,7 @@ public class ClientFactory {
         loggingInterceptor.setLevel(debug ? HttpLoggingInterceptor.Level.BASIC : HttpLoggingInterceptor.Level.NONE);
         final OkHttpClient client = new OkHttpClient.Builder()
                 .connectionPool(CP)
-                .addInterceptor(new AuthenticationInterceptor(tokenProvider.get()))
+                .addInterceptor(new AuthenticationInterceptor(apiToken))
                 .addInterceptor(UserAgentInterceptor.INSTANCE)
                 .addInterceptor(loggingInterceptor)
                 .build();
@@ -64,6 +56,16 @@ public class ClientFactory {
                         HetznerConstants.DEFAULT_ENDPOINT))
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create(GSON));
-        return builder.build();
+        return builder.build().create(HetznerApi.class);
+    }
+    /**
+     * Create new {@link Retrofit} object using token provider.
+     *
+     * @param tokenProvider supplier of Hetzner API token.
+     * @return Proxy of {@link HetznerApi}
+     * @throws IllegalStateException when credentialsId is not valid
+     */
+    public static HetznerApi create(Supplier<String> tokenProvider) {
+        return create(tokenProvider.get());
     }
 }

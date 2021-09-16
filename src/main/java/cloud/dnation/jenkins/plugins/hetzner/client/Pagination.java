@@ -16,9 +16,11 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import com.google.gson.annotations.SerializedName;
+import lombok.Builder;
 import lombok.Data;
 
 @Data
+@Builder
 public class Pagination {
     @SerializedName("last_page")
     private String lastPage;

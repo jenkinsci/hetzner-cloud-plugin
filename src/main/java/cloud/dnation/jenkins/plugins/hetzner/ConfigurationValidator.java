@@ -49,9 +49,9 @@ public class ConfigurationValidator {
      * @return ValidationResult
      */
     private static ValidationResult validateWithClient(ValidationAction action, String credentialsId) {
-        final Retrofit client = ClientFactory.create(JenkinsSecretTokenProvider.forCredentialsId(credentialsId));
+        final HetznerApi client = ClientFactory.create(JenkinsSecretTokenProvider.forCredentialsId(credentialsId));
         try {
-            return action.validate(client.create(HetznerApi.class));
+            return action.validate(client);
         } catch (Exception e) {
             return ValidationResult.fromException(e);
         }

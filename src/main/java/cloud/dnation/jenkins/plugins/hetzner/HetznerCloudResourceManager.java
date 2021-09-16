@@ -22,6 +22,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import hudson.util.Secret;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import retrofit2.Response;
 
@@ -32,12 +34,14 @@ import java.util.stream.Collectors;
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.*;
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.LABEL_VALUE_PLUGIN;
 
+@RequiredArgsConstructor
 @Slf4j
 public class HetznerCloudResourceManager {
+    @NonNull
     private final String credentialsId;
 
-    public HetznerCloudResourceManager(String credentialsId) {
-        this.credentialsId = Objects.requireNonNull(credentialsId);
+    public static HetznerCloudResourceManager create(String credentialsId) {
+        return new HetznerCloudResourceManager(credentialsId);
     }
 
     private static Map<String, String> createLabelsForServer(String cloudName) {
@@ -68,8 +72,7 @@ public class HetznerCloudResourceManager {
     }
 
     private HetznerApi proxy() {
-        return ClientFactory.create(JenkinsSecretTokenProvider.forCredentialsId(credentialsId))
-                .create(HetznerApi.class);
+        return ClientFactory.create(JenkinsSecretTokenProvider.forCredentialsId(credentialsId));
     }
 
     /**

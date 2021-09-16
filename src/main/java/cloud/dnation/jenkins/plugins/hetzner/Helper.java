@@ -19,14 +19,13 @@ import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
 import com.trilead.ssh2.crypto.PEMDecoder;
 import hudson.security.ACL;
-import hudson.util.FormValidation;
 import jenkins.model.Jenkins;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.UtilityClass;
 import org.slf4j.Logger;
 import retrofit2.Response;
 
@@ -48,6 +47,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.SimpleFormatter;
 
+@UtilityClass
 public class Helper {
     private static final String SSH_RSA = "ssh-rsa";
 

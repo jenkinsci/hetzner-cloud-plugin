@@ -15,11 +15,13 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
+import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
 
 @Data
+@Builder
 public class GetServersBySelectorResponse {
     private List<ServerDetail> servers;
     private Meta meta;
