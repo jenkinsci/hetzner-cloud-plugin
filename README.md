@@ -138,6 +138,12 @@ credentials:
                     -----END OPENSSH PRIVATE KEY-----
 ```
 
+### Server details
+
+Plugin is able to report server details for any provisioned node
+
+![server details](docs/server-detail.png)
+
 ### Create server image using Packer
 
 It's possible to create images in Hetzner Cloud using Packer.
