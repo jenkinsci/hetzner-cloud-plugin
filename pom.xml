@@ -25,6 +25,14 @@
         <artifactId>plugin</artifactId>
         <version>4.19</version>
     </parent>
+    <name>Hetzner Cloud</name>
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
     <properties>
         <jenkins.version>2.289.1</jenkins.version>
         <java.level>8</java.level>
