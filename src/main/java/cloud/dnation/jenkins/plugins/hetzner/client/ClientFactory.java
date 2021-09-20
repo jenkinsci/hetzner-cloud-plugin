@@ -59,7 +59,7 @@ public class ClientFactory {
         return builder.build().create(HetznerApi.class);
     }
     /**
-     * Create new {@link Retrofit} object using token provider.
+     * Create new proxy of {@link HetznerApi} using token provider.
      *
      * @param tokenProvider supplier of Hetzner API token.
      * @return Proxy of {@link HetznerApi}

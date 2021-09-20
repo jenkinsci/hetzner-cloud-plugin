@@ -75,6 +75,15 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
     }
 
     @Override
+    public String getDisplayName() {
+        if (serverInstance != null && serverInstance.getServerDetail() != null) {
+            return getNodeName() + " in " + serverInstance.getServerDetail().getDatacenter()
+                    .getLocation().getDescription();
+        }
+        return super.getDisplayName();
+    }
+
+    @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         ((HetznerServerComputerLauncher) getLauncher()).signalTermination();
         cloud.getResourceManager().destroyServer(serverInstance.getServerDetail());
