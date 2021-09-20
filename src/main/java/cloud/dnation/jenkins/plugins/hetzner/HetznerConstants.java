@@ -39,11 +39,6 @@ public class HetznerConstants {
     public static final String PROP_CLIENT_DEBUG = PROP_PREFIX + ".client-debug";
 
     /**
-     * Name of system property used to configure wait interval for server to come online.
-     */
-    public static final String PROP_WAIT_FOR_SERVER = PROP_PREFIX + ".wait-for-server";
-
-    /**
      * Hetzner public cloud API endpoint.
      */
     public static final String DEFAULT_ENDPOINT = "https://api.hetzner.cloud/v1/";
