@@ -1,1 +1,2 @@
 _extends: .github
+version-template: $MAJOR.$MINOR.$PATCH

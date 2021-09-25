@@ -18,7 +18,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.jenkins.plugins</groupId>
     <artifactId>hetzner-cloud</artifactId>
-    <version>${revision}${changelist}</version>
+    <version>${changelist}</version>
     <packaging>hpi</packaging>
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
@@ -47,9 +47,7 @@
         <tag>${scmTag}</tag>
     </scm>
     <properties>
-        <revision>0.0.2</revision>
-        <changelist>-SNAPSHOT</changelist>
-        <gitHubRepo>jenkinsci/hetzner-cloud-plugin</gitHubRepo>
+        <changelist>999999-SNAPSHOT</changelist>
         <gitHubRepo>jenkinsci/hetzner-cloud-plugin</gitHubRepo>
         <jenkins.version>2.289.1</jenkins.version>
         <java.level>8</java.level>
