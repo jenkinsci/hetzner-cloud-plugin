@@ -20,6 +20,7 @@
     <artifactId>hetzner-cloud</artifactId>
     <version>${changelist}</version>
     <packaging>hpi</packaging>
+    <url>https://github.com/jenkinsci/hetzner-cloud-plugin</url>
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
