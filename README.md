@@ -24,6 +24,15 @@ The Hetzner cloud plugin enables [Jenkins CI](https://www.jenkins.io/) to schedu
 
 ## Installation
 
+### Installation from update center
+
+- Open your Jenkins instance in browser (as Jenkins administrator)
+- Go to `Manage Jenkins`
+- Go to `Manage Plugins`
+- Search for _Hetzner Cloud_ under `Available` tab
+- Click `Install`
+- Jenkins server might require restart after plugin is installed
+
 ### Installation from source
 
 - Clone this git repository
@@ -37,23 +46,27 @@ The Hetzner cloud plugin enables [Jenkins CI](https://www.jenkins.io/) to schedu
 
 ## Configuration
 
+Regardless of configuration method, you will need API token to access your Hetzner Cloud project.
+You can read more about creating API token in [official documentation](https://docs.hetzner.cloud/).
+
 ### Manual configuration
 
 #### 1. Create credentials for API token
 
-From Dashboard => Manage Jenkins => Manage credentials => Global => Add credentials
+Go to `Dashboard` => `Manage Jenkins` => `Manage credentials` => `Global` => `Add credentials`, choose `Secret text` as a credentials kind:
 
 ![add-token](docs/add-token.png)
 
 #### 2. Create cloud
 
-From Dashboard => Manage Jenkins => Manage Nodes and Clouds => Configure Clouds => Add a new cloud
-
-Choose `Hetzner` from dropdown menu
+Go to `Dashboard` => `Manage Jenkins` => `Manage Nodes and Clouds` => `Configure Clouds` => `Add a new cloud` and choose `Hetzner` from dropdown menu:
 
 ![add-cloud-button](docs/add-hcloud-button.png)
 
 ![add-cloud](docs/add-cloud.png)
+
+Name of cloud should match pattern `[a-zA-Z0-9][a-zA-Z\-_0-9]`.
+
 
 You can use `Test Connection` button to verify that token is valid and that plugin can use Hetzner API.
 
@@ -62,7 +75,39 @@ You can use `Test Connection` button to verify that token is valid and that plug
 ![server-template](docs/server-template.png)
 
 
-### Scripted configuration
+Following attributes are **required** for each server template:
+
+- `Name` - name of template, should match regex `[a-zA-Z0-9][a-zA-Z\-_0-9]`
+
+- `Connect method` this attribute specifies how Jenkins master will connect to newly provisioned server. These methods are supported:
+  - `Connect as root` - SSH connection to provisioned server will be done as `root` user.
+     This is convenient method due to fact, that Hetzner cloud allows us to specify SSH key for `root` user during server creation.
+     Once connection is established, Jenkins agent will be launched by non-root user specified in chosen credentials.
+     User must already exist.
+  - `Connect as user specified in credentials` - again, that user must already be known to server and its `~/.ssh/authorized_keys` must contain public key counterpart of chosen SSH credentials.
+     See bellow how server image can pre created using Hashicorp packer, which also can be used to populate public SSH key.
+- `Labels` - set of node labels, separated by space
+
+- `Image ID or label expression` - identifier of server image. It could be ID of image (integer) or label expression.
+  In case of label expression, it is assumed that expression resolve into exactly one result.
+  Either case, image **must have JRE already installed**.
+- `Server type` - type of server
+
+- `Location` - this could be either datacenter name or location name. Distinction is made using presence of character `-` in value, which is meant for datacenter.
+
+These additional attributes can be specified, but are not required:
+
+- `Remote directory` - agent working directory
+
+- `Agent JVM options` - Additional JVM options for Jenkins agent
+
+- `Boot deadline minutes` - Maximum amount of time (in minutes) to wait for newly created server to be in `running` state. 
+
+- `Number of Executors`
+
+- `Keep around minutes` - Time that agent will be kept online after it become idle.
+
+### Scripted configuration using Groovy
 
 ```groovy
 import cloud.dnation.jenkins.plugins.hetzner.*
