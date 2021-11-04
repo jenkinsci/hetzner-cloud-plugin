@@ -97,6 +97,9 @@ Following attributes are **required** for each server template:
 
 These additional attributes can be specified, but are not required:
 
+- `Network` - Network ID (integer) or label expression that resolves into single network. When specified, **private IP address will be used instead of public**,
+   so Jenkins controller must be part of same network (or have other means) to communicate with newly created server
+
 - `Remote directory` - agent working directory
 
 - `Agent JVM options` - Additional JVM options for Jenkins agent

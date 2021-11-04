@@ -95,13 +95,13 @@ public class Helper {
     }
 
     /**
-     * Check if given string could be image ID, that is positive integer.
+     * Check if given string could be parsed as positive integer.
      *
-     * @param imageId string to check
-     * @return <code>true</code> if given string could be image ID, <code>false</code> otherwise
+     * @param str string to check
+     * @return <code>true</code> if given string could be parsed as positive integer, <code>false</code> otherwise
      */
-    public static boolean isImageId(String imageId) {
-        final Integer value = Ints.tryParse(imageId);
+    public static boolean isPossiblyInteger(String str) {
+        final Integer value = Ints.tryParse(str);
         return value != null && value > 0;
     }
 

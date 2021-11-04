@@ -92,6 +92,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Setter(onMethod = @__({@DataBoundSetter}))
     private int bootDeadline;
 
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private String network;
+
     @DataBoundConstructor
     public HetznerServerTemplate(String name, String labelStr, String image,
                                  String location, String serverType) throws FormValidation {
@@ -156,6 +160,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         public FormValidation doVerifyImage(@QueryParameter String image,
                                             @QueryParameter String credentialsId) {
             return verifyImage(image, credentialsId).toFormValidation();
+        }
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
+        public FormValidation doVerifyNetwork(@QueryParameter String network,
+                                              @QueryParameter String credentialsId) {
+            return verifyNetwork(network, credentialsId).toFormValidation();
         }
 
         @Restricted(NoExternalUse.class)

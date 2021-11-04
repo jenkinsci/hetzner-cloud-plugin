@@ -19,6 +19,7 @@ import cloud.dnation.jenkins.plugins.hetzner.Helper;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerConstants;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerServerAgent;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerServerComputer;
+import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.base.Preconditions;
@@ -41,7 +42,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -149,7 +149,13 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
                                        TaskListener taskListener) throws InterruptedException, AbortException {
         int retries = 10;
         while (!terminated.get() && retries-- > 0) {
-            final String ipv4 = node.getServerInstance().getServerDetail().getPublicNet().getIpv4().getIp();
+            final ServerDetail serverDetail = node.getServerInstance().getServerDetail();
+            final String ipv4;
+            if (serverDetail.getPrivateNet() != null && !serverDetail.getPrivateNet().isEmpty()) {
+                ipv4 = serverDetail.getPrivateNet().get(0).getIp();
+            } else {
+                ipv4 = serverDetail.getPublicNet().getIpv4().getIp();
+            }
             final Connection conn = new Connection(ipv4, 22);
             try {
                 conn.connect(AllowAnyServerHostKeyVerifier.INSTANCE,

@@ -23,7 +23,6 @@ import com.google.common.primitives.Ints;
 import hudson.util.FormValidation;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import retrofit2.Retrofit;
 
 @Slf4j
 public class ConfigurationValidator {
@@ -97,12 +96,34 @@ public class ConfigurationValidator {
                         "Expected exactly one result, got %s", result.getImages().size());
                 return new ValidationResult(true, "Found: " +
                         result.getImages().get(0).getDescription());
-            } else if (Helper.isImageId(image)) {
+            } else if (Helper.isPossiblyInteger(image)) {
                 final GetImageByIdResponse result = api.getImageById(Integer.parseInt(image)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getImage().getDescription());
             } else {
                 return new ValidationResult(false, "Image expression unsupported : " + image);
+            }
+        }, credentialsId);
+    }
+
+    static ValidationResult verifyNetwork(String network, String credentialsId) {
+        if (Strings.isNullOrEmpty(network)) {
+            return new ValidationResult(false, "Network label expression is empty");
+        }
+        return validateWithClient(api -> {
+            if (Helper.isLabelExpression(network)) {
+                final GetNetworksBySelectorResponse result = api.getNetworkBySelector(network).execute().body();
+                Preconditions.checkArgument(result.getNetworks().size() == 1,
+                        "Expected exactly one result, got %s", result.getNetworks().size());
+                return new ValidationResult(true, "Found: " +
+                        result.getNetworks().get(0).getName() + " " +
+                        result.getNetworks().get(0).getIpRange());
+            } else if (Helper.isPossiblyInteger(network)) {
+                final GetNetworkByIdResponse result = api.getNetworkById(Integer.parseInt(network)).execute().body();
+                return new ValidationResult(true, "Found: " +
+                        result.getNetwork().getName() + " " + result.getNetwork().getIpRange());
+            } else {
+                return new ValidationResult(false, "Network expression unsupported : " + network);
             }
         }, credentialsId);
     }

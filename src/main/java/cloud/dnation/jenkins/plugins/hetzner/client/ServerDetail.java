@@ -18,6 +18,8 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class ServerDetail {
     private int id;
@@ -42,6 +44,9 @@ public class ServerDetail {
 
     @SerializedName("public_net")
     private PublicNetDetail publicNet;
+
+    @SerializedName("private_net")
+    private List<PrivateNetDetail> privateNet;
 
     @SerializedName("server_type")
     private ServerType serverType;

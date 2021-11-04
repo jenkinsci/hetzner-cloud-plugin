@@ -74,7 +74,7 @@ public class HetznerApiTest {
     @Test
     public void testGetNetworksBySelector() throws IOException {
         ws.enqueue(new MockResponse().setBody(resourceAsString("get-networks-by-selector.json")));
-        Call<GetNetworksBySelectorResponse> call = api.getNetworkBySelector("test=1", 0, 10);
+        Call<GetNetworksBySelectorResponse> call = api.getNetworkBySelector("test=1");
         GetNetworksBySelectorResponse result = call.execute().body();
         assertEquals(1, result.getNetworks().size());
         assertEquals(12, result.getNetworks().get(0).getId());
@@ -86,7 +86,7 @@ public class HetznerApiTest {
     @Test
     public void testGetNetworksBySelectorEmpty() throws IOException {
         ws.enqueue(new MockResponse().setBody(resourceAsString("get-networks-by-selector-empty.json")));
-        Call<GetNetworksBySelectorResponse> call = api.getNetworkBySelector("test=invalid", 0, 10);
+        Call<GetNetworksBySelectorResponse> call = api.getNetworkBySelector("test=invalid");
         GetNetworksBySelectorResponse result = call.execute().body();
         assertEquals(0, result.getNetworks().size());
         assertEquals("0", result.getMeta().getPagination().getTotalEntries());
