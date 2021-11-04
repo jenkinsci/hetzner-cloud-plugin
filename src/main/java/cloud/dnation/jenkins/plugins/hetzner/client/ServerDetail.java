@@ -19,11 +19,12 @@ import com.google.gson.annotations.SerializedName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
-public class ServerDetail extends IdentifiableResource{
+public class ServerDetail extends IdentifiableResource {
     private String name;
     /**
      * Status of the Server.
@@ -43,6 +44,8 @@ public class ServerDetail extends IdentifiableResource{
      */
     private String status;
 
+    private String created;
+
     @SerializedName("public_net")
     private PublicNetDetail publicNet;
 
@@ -53,4 +56,6 @@ public class ServerDetail extends IdentifiableResource{
     private ServerType serverType;
 
     private DatacenterDetail datacenter;
+
+    private ImageDetail image;
 }

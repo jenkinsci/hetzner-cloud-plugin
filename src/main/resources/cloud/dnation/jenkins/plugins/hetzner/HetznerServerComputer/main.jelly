@@ -22,18 +22,31 @@
         </j:when>
         <j:otherwise>
             <j:set var="instance" value="${it.node.serverInstance.serverDetail}"/>
+            <j:set var="template" value="${it.node.template}"/>
             <table class="bigtable" style="text-align: left;">
                 <tr>
                     <th>Server Id</th>
                     <td>${instance.id}</td>
                 </tr>
                 <tr>
+                    <th>Template</th>
+                    <td>${template.name}</td>
+                </tr>
+                <tr>
                     <th>Name</th>
                     <td>${instance.name}</td>
                 </tr>
                 <tr>
+                    <th>Created</th>
+                    <td>${instance.created}</td>
+                </tr>
+                <tr>
                     <th>Status</th>
                     <td>${instance.status}</td>
+                </tr>
+                <tr>
+                    <th>Image</th>
+                    <td>${instance.image.description}</td>
                 </tr>
                 <tr>
                     <th>vCPU</th>
@@ -48,9 +61,17 @@
                     <td>${instance.serverType.disk} GB</td>
                 </tr>
                 <tr>
-                    <th>IPv4 address</th>
+                    <th>Public IPv4 address</th>
                     <td>${instance.publicNet.ipv4.ip}</td>
                 </tr>
+                <j:choose>
+                    <j:when test="${instance.privateNet != null and instance.privateNet.size() == 1}">
+                        <tr>
+                            <th>Private IPv4 address</th>
+                            <td>${instance.privateNet.get(0).ip}</td>
+                        </tr>
+                    </j:when>
+                </j:choose>
                 <tr>
                     <th>Datacenter</th>
                     <td>${instance.datacenter.name}</td>
