@@ -154,4 +154,28 @@ public interface HetznerApi {
     Call<GetServersBySelectorResponse> getServersBySelector(@Query("label_selector") String selector,
                                                             @Query("page") int page,
                                                             @Query("per_page") int perPage);
+
+    /**
+     * Get all networks matching given label selector.
+     *
+     * @param selector label selector used to match servers
+     * @param page     index of page to get
+     * @param perPage  number of items per page
+     * @return paged list of networks
+     * see <a href="https://docs.hetzner.cloud/#networks-get-all-networks">API reference</a>
+     */
+    @GET("/v1/networks")
+    Call<GetNetworksBySelectorResponse> getNetworkBySelector(@Query("label_selector") String selector,
+                                                             @Query("page") int page,
+                                                             @Query("per_page") int perPage);
+
+    /**
+     * Get network detail based on provided network ID.
+     *
+     * @param id network ID
+     * @return details of network
+     * see <a href="https://docs.hetzner.cloud/#networks-get-a-network">API reference</a>
+     */
+    @GET("/v1/networks/{id}")
+    Call<GetNetworkByIdResponse> getNetworkById(@Path("id") int id);
 }
