@@ -19,8 +19,10 @@ import cloud.dnation.jenkins.plugins.hetzner.client.*;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import hudson.util.Secret;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -80,12 +82,12 @@ public class HetznerCloudResourceManager {
      * It's expected that provided label expression resolves to single image.
      *
      * @param labelExpression label expression used to filter image
-     * @return image ID in form of String
+     * @return image ID
      * @throws IOException              if fails to make API call
      * @throws IllegalStateException    if there was invalid response from API server
      * @throws IllegalArgumentException if label expression didn't yield single image
      */
-    private String getImageIdForLabelExpression(String labelExpression) throws IOException {
+    private int getImageIdForLabelExpression(String labelExpression) throws IOException {
         log.info("Trying to find image ID for label expression '{}'", labelExpression);
         final Response<GetImagesBySelectorResponse> response = proxy().getImagesBySelector(labelExpression)
                 .execute();
@@ -93,7 +95,28 @@ public class HetznerCloudResourceManager {
         final List<ImageDetail> images = getPayload(response, GetImagesBySelectorResponse::getImages);
         Preconditions.checkArgument(images.size() == 1,
                 "No exact match found for expression '%s', results %d", labelExpression, images.size());
-        return String.valueOf(Iterables.getOnlyElement(images).getId());
+        return Iterables.getOnlyElement(images).getId();
+    }
+
+    /**
+     * Attempt to obtain network ID based on label expression.
+     * It's expected that provided label expression resolves to single network.
+     *
+     * @param labelExpression label expression used to filter image
+     * @return network ID
+     * @throws IOException              if fails to make API call
+     * @throws IllegalStateException    if there was invalid response from API server
+     * @throws IllegalArgumentException if label expression didn't yield single network
+     */
+    private int getNetworkIdForLabelExpression(String labelExpression) throws IOException {
+        log.info("Trying to find network ID for label expression '{}'", labelExpression);
+        final Response<GetNetworksBySelectorResponse> response = proxy().getNetworkBySelector(labelExpression)
+                .execute();
+        assertValidResponse(response);
+        final List<NetworkDetail> networks = getPayload(response, GetNetworksBySelectorResponse::getNetworks);
+        Preconditions.checkArgument(networks.size() == 1,
+                "No exact match found for expression '%s', results %d", labelExpression, networks.size());
+        return Iterables.getOnlyElement(networks).getId();
     }
 
     /**
@@ -175,11 +198,21 @@ public class HetznerCloudResourceManager {
             //check if image is label expression
             if (agent.getTemplate().getImage().contains("=")) {
                 //if so, query image ID
-                imageId = getImageIdForLabelExpression(agent.getTemplate().getImage());
+                imageId = String.valueOf(getImageIdForLabelExpression(agent.getTemplate().getImage()));
             } else {
                 imageId = agent.getTemplate().getImage();
             }
+
             final CreateServerRequest createServerRequest = new CreateServerRequest();
+            if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
+                final int networkId;
+                if (Helper.isPossiblyInteger(agent.getTemplate().getNetwork())) {
+                    networkId = Integer.parseInt(agent.getTemplate().getNetwork());
+                } else {
+                    networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
+                }
+                createServerRequest.setNetworks(Lists.newArrayList(networkId));
+            }
             createServerRequest.setServerType(agent.getTemplate().getServerType());
             createServerRequest.setImage(imageId);
             createServerRequest.setName(agent.getNodeName());

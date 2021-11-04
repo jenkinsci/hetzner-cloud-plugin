@@ -18,23 +18,9 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
 
-import java.util.List;
-import java.util.Map;
-
 @Data
-public class CreateServerRequest {
-    private String name;
-    private String location;
-    private String datacenter;
-    @SerializedName("server_type")
-    private String serverType;
-    @SerializedName("start_after_create")
-    private boolean startAfterCreate = true;
-    private String image;
-    @SerializedName("user_data")
-    private String userData;
-    private Map<String, String> labels;
-    @SerializedName("ssh_keys")
-    private List<String> sshKeys;
-    private List<Integer> networks;
+public class PrivateNetDetail {
+    @SerializedName("network")
+    private int networkId;
+    private String ip;
 }

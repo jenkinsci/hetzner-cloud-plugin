@@ -37,6 +37,11 @@
         <f:validateButton title="${%Verify location}" progress="${%Testing...}" method="verifyLocation"
                           with="location,credentialsId"/>
     </f:entry>
+    <f:entry title="${%Network}" field="network">
+        <f:textbox/>
+        <f:validateButton title="${%Verify network}" progress="${%Testing...}" method="verifyNetwork"
+                          with="network,credentialsId"/>
+    </f:entry>
     <f:advanced title="${%Advanced}" align="left">
         <f:entry title="${%Remote directory}" default="/home/jenkins" field="remoteFs">
             <f:textbox/>
