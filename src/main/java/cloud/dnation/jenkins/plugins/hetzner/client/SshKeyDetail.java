@@ -17,14 +17,15 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.Map;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class SshKeyDetail {
+public class SshKeyDetail extends IdentifiableResource{
     private String created;
     private String fingerprint;
-    private int id;
     private Map<String, String> labels;
     private String name;
     @SerializedName("public_key")

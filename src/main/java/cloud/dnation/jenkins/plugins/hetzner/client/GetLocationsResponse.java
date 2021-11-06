@@ -16,10 +16,12 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class GetLocationsResponse {
+public class GetLocationsResponse extends AbstractSearchResponse{
     private List<LocationDetail> locations;
 }

@@ -17,11 +17,13 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class GetServerTypesResponse {
+public class GetServerTypesResponse extends AbstractSearchResponse{
     @SerializedName("server_types")
     List<ServerType> serverTypes;
 }

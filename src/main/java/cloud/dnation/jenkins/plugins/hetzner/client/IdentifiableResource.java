@@ -16,13 +16,8 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
-@EqualsAndHashCode(callSuper = true)
 @Data
-public class ImageDetail extends IdentifiableResource{
-    private String type = "snapshot";
-    private String status = "available";
-    private String name;
-    private String description;
+public class IdentifiableResource {
+    protected int id;
 }

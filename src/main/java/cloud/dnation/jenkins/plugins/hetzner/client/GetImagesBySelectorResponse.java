@@ -18,12 +18,14 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
 @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
-public class GetImagesBySelectorResponse {
+public class GetImagesBySelectorResponse extends AbstractSearchResponse {
     @NonNull
     private List<ImageDetail> images;
 }

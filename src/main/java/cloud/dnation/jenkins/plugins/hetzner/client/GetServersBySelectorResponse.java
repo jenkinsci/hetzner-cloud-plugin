@@ -17,12 +17,13 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
 @Builder
-public class GetServersBySelectorResponse {
+public class GetServersBySelectorResponse extends AbstractSearchResponse{
     private List<ServerDetail> servers;
-    private Meta meta;
 }
