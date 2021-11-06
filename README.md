@@ -162,6 +162,7 @@ jenkins:
             remoteFs: /var/lib/jenkins
             location: fsn1
             image: name=jenkins
+            network: subsystem=cd
             labelStr: java
             numExecutors: 3
             connector:
