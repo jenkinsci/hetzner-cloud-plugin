@@ -27,10 +27,12 @@ import hudson.util.Secret;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import retrofit2.Call;
 import retrofit2.Response;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.*;
@@ -88,14 +90,8 @@ public class HetznerCloudResourceManager {
      * @throws IllegalArgumentException if label expression didn't yield single image
      */
     private int getImageIdForLabelExpression(String labelExpression) throws IOException {
-        log.info("Trying to find image ID for label expression '{}'", labelExpression);
-        final Response<GetImagesBySelectorResponse> response = proxy().getImagesBySelector(labelExpression)
-                .execute();
-        assertValidResponse(response);
-        final List<ImageDetail> images = getPayload(response, GetImagesBySelectorResponse::getImages);
-        Preconditions.checkArgument(images.size() == 1,
-                "No exact match found for expression '%s', results %d", labelExpression, images.size());
-        return Iterables.getOnlyElement(images).getId();
+        return searchResourceByLabelExpression(labelExpression, proxy()::getImagesBySelector,
+                GetImagesBySelectorResponse::getImages);
     }
 
     /**
@@ -109,14 +105,22 @@ public class HetznerCloudResourceManager {
      * @throws IllegalArgumentException if label expression didn't yield single network
      */
     private int getNetworkIdForLabelExpression(String labelExpression) throws IOException {
-        log.info("Trying to find network ID for label expression '{}'", labelExpression);
-        final Response<GetNetworksBySelectorResponse> response = proxy().getNetworkBySelector(labelExpression)
-                .execute();
+        return searchResourceByLabelExpression(labelExpression, proxy()::getNetworkBySelector,
+                GetNetworksBySelectorResponse::getNetworks);
+    }
+
+    private <R extends AbstractSearchResponse, I extends IdentifiableResource> int searchResourceByLabelExpression(
+            String labelExpression,
+            Function<String, Call<R>> searchFunction,
+            Function<R, List<I>> getItemsFunction) throws IOException {
+        log.info("Trying to find single resource for label expression '{}'", labelExpression);
+        final Response<R> response = searchFunction.apply(labelExpression).execute();
         assertValidResponse(response);
-        final List<NetworkDetail> networks = getPayload(response, GetNetworksBySelectorResponse::getNetworks);
-        Preconditions.checkArgument(networks.size() == 1,
-                "No exact match found for expression '%s', results %d", labelExpression, networks.size());
-        return Iterables.getOnlyElement(networks).getId();
+        List<I> items = getPayload(response, getItemsFunction);
+        Preconditions.checkArgument(items.size() == 1,
+                "No exact match found for expression '%s', results %d",
+                labelExpression, items.size());
+        return Iterables.getOnlyElement(items).getId();
     }
 
     /**

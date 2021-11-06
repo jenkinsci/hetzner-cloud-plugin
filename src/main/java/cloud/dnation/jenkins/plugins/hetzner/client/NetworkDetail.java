@@ -17,11 +17,12 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class NetworkDetail {
+public class NetworkDetail extends IdentifiableResource{
     private String name;
     @SerializedName("ip_range")
     private String ipRange;
-    private int id;
 }

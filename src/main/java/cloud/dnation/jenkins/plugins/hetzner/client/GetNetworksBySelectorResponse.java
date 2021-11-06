@@ -16,11 +16,12 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class GetNetworksBySelectorResponse {
+public class GetNetworksBySelectorResponse extends AbstractSearchResponse {
     private List<NetworkDetail> networks;
-    private Meta meta;
 }

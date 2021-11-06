@@ -16,10 +16,11 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class ActionDetail {
-    private int id;
+public class ActionDetail extends IdentifiableResource {
     private String command;
     private String status;
     private ErrorDetail error;

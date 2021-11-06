@@ -16,10 +16,11 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class ServerType {
-    private int id;
+public class ServerType extends IdentifiableResource{
     private String name;
     private String description;
     private int cores;

@@ -16,10 +16,11 @@
 package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class DatacenterDetail {
-    private int id;
+public class DatacenterDetail extends IdentifiableResource{
     private String name;
     private String description;
     private LocationDetail location;

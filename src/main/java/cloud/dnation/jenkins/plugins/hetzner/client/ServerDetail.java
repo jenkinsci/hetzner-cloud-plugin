@@ -17,12 +17,13 @@ package cloud.dnation.jenkins.plugins.hetzner.client;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class ServerDetail {
-    private int id;
+public class ServerDetail extends IdentifiableResource{
     private String name;
     /**
      * Status of the Server.
