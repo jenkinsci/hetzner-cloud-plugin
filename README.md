@@ -17,6 +17,8 @@
 # Hetzner Cloud Plugin for Jenkins
 
 The Hetzner cloud plugin enables [Jenkins CI](https://www.jenkins.io/) to schedule builds on dynamically provisioned VMs in [Hetzner Cloud](https://www.hetzner.com/cloud).
+Servers in Hetzner cloud are provisioned as they are needed, based on labels assigned to them.
+Jobs must have same label specified in their configuration in order to be scheduled on provisioned servers.
 
 # Developed by
 
@@ -100,7 +102,8 @@ These additional attributes can be specified, but are not required:
 - `Network` - Network ID (integer) or label expression that resolves into single network. When specified, **private IP address will be used instead of public**,
    so Jenkins controller must be part of same network (or have other means) to communicate with newly created server
 
-- `Remote directory` - agent working directory
+- `Remote directory` - agent working directory. When omitted, default value of `/home/jenkins` will be used.
+  **This path must exist on agent node prior to launch.**
 
 - `Agent JVM options` - Additional JVM options for Jenkins agent
 
@@ -217,3 +220,14 @@ It's possible to create images in Hetzner Cloud using Packer.
 - there is no known way of verifying SSH host keys on newly provisioned VMs
 - modification of SSH credentials used to connect to VMs require manual removal of key from project's security settings.
   Plugin will automatically create new SSH key in project after it's removed.
+- JRE must already be installed on image that is used to create new server instance.
+- Working directory of agent on newly provisioned server must already exist and must be accessible by
+  user used to launch agent
+
+### Common problems
+
+- **Symptom** : Jenkins failed to create new server in cloud because of `Invalid API response : 409`
+
+  **Cause** : SSH key with same signature already exists in project's security settings.
+
+  **Remedy** : Remove offending key from project security settings, it will be automatically created using correct labels.
