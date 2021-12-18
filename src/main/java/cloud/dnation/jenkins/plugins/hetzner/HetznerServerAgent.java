@@ -59,7 +59,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
         this.provisioningId = Objects.requireNonNull(provisioningId);
         setLabelString(template.getLabelStr());
         setNumExecutors(template.getNumExecutors());
-        setMode(Mode.EXCLUSIVE);
+        setMode(template.getMode() == null ? Mode.EXCLUSIVE : template.getMode());
         if (Strings.isNullOrEmpty(template.getKeepAroundMinutes())) {
             setRetentionStrategy(HetznerConstants.DEFAULT_RETENTION_STRATEGY);
         } else {

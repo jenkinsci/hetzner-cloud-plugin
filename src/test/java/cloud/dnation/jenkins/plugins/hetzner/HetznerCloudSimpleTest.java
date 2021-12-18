@@ -18,11 +18,13 @@ package cloud.dnation.jenkins.plugins.hetzner;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractHetznerSshConnector;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import hudson.model.Node;
 import hudson.model.labels.LabelAtom;
 import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
 import jenkins.model.Jenkins;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.stubbing.Answer;
@@ -54,16 +56,21 @@ import static org.powermock.api.mockito.PowerMockito.*;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({Jenkins.class, HetznerCloudResourceManager.class})
 public class HetznerCloudSimpleTest {
-    @Test
-    public void test() throws IOException {
+    private HetznerCloudResourceManager rsrcMgr;
+
+    @Before
+    public void setupBefore() {
         PowerMockito.mockStatic(Jenkins.class, HetznerCloudResourceManager.class);
-        HetznerCloudResourceManager rsrcMgr = mock(HetznerCloudResourceManager.class);
+        rsrcMgr = mock(HetznerCloudResourceManager.class);
         when(HetznerCloudResourceManager.create(anyString())).thenReturn(rsrcMgr);
 
         Jenkins jenkins = mock(Jenkins.class);
         doAnswer((Answer<LabelAtom>) invocationOnMock -> new LabelAtom(invocationOnMock.getArgument(0)))
                 .when(jenkins).getLabelAtom(anyString());
         when(Jenkins.get()).thenReturn(jenkins);
+    }
+    @Test
+    public void testCanProvision() throws IOException {
 
         HetznerServerTemplate template1 = new HetznerServerTemplate("template-1", "java",
                 "name=img1", "nbg1", "cx21");
@@ -83,5 +90,27 @@ public class HetznerCloudSimpleTest {
 
         Cloud.CloudState cloudState2 = new Cloud.CloudState(new LabelAtom("unknown"), 1);
         assertFalse(cloud.canProvision(cloudState2));
+    }
+
+    @Test
+    public void testCannotProvisionInExclusiveMode() {
+        HetznerServerTemplate tmpl1 = new HetznerServerTemplate("tmpl1", "label1", "img1", "fsn1", "cx31");
+        tmpl1.setMode(Node.Mode.EXCLUSIVE);
+        final HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-credentials", "10",
+                Lists.newArrayList(tmpl1)
+        );
+        Cloud.CloudState cloudState = new Cloud.CloudState(new LabelAtom("java"), 1);
+        assertFalse(cloud.canProvision(cloudState));
+    }
+
+    @Test
+    public void testCanProvisionInNormalMode() {
+        HetznerServerTemplate tmpl1 = new HetznerServerTemplate("tmpl1", null, "img1", "fsn1", "cx31");
+        tmpl1.setMode(Node.Mode.NORMAL);
+        final HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-credentials", "10",
+                Lists.newArrayList(tmpl1)
+        );
+        Cloud.CloudState cloudState = new Cloud.CloudState(new LabelAtom("java"), 1);
+        assertTrue(cloud.canProvision(cloudState));
     }
 }

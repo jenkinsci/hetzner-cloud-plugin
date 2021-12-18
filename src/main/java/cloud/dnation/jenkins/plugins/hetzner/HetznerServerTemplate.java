@@ -22,6 +22,7 @@ import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Label;
+import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.util.FormValidation;
 import jenkins.model.Jenkins;
@@ -41,6 +42,8 @@ import java.util.Set;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.*;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckNonEmpty;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckPositiveInt;
+import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
+import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REMOTE_FS;
 
 @ToString
 @Slf4j
@@ -96,9 +99,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Setter(onMethod = @__({@DataBoundSetter}))
     private String network;
 
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private Mode mode = Mode.EXCLUSIVE;
+
     @DataBoundConstructor
     public HetznerServerTemplate(String name, String labelStr, String image,
-                                 String location, String serverType) throws FormValidation {
+                                 String location, String serverType) {
         this.name = name;
         this.labelStr = Util.fixNull(labelStr);
         this.image = image;
@@ -133,7 +140,9 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
             throws IOException, Descriptor.FormException {
         return new HetznerServerAgent(
                 provisioningId,
-                nodeName, remoteFs, connector.createLauncher(),
+                nodeName,
+                getStringOrDefault(remoteFs, DEFAULT_REMOTE_FS),
+                connector.createLauncher(),
                 cloud,
                 this
         );
@@ -184,8 +193,12 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
 
         @Restricted(NoExternalUse.class)
         @RequirePOST
-        public FormValidation doCheckLabelStr(@QueryParameter String labelStr) {
-            return doCheckNonEmpty(labelStr, "Label");
+        public FormValidation doCheckLabelStr(@QueryParameter String labelStr, @QueryParameter Mode mode) {
+            if (Strings.isNullOrEmpty(labelStr) && Mode.EXCLUSIVE == mode) {
+                return FormValidation.warning("You may want to assign labels to this node;"
+                        + " it's marked to only run jobs that are exclusively tied to itself or a label.");
+            }
+            return FormValidation.ok();
         }
 
         @Restricted(NoExternalUse.class)
