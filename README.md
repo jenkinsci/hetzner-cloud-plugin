@@ -88,7 +88,18 @@ Following attributes are **required** for each server template:
      User must already exist.
   - `Connect as user specified in credentials` - again, that user must already be known to server and its `~/.ssh/authorized_keys` must contain public key counterpart of chosen SSH credentials.
      See bellow how server image can pre created using Hashicorp packer, which also can be used to populate public SSH key.
-- `Labels` - set of node labels, separated by space
+- `Labels` - Labels that identifies jobs that could run on node created from this template.
+  Multiple values can be specified when separated by space.
+  When no labels are specified and usage mode is set to <strong>Use this node as much as possible</strong>,
+  then no restrictions will apply and node will be eligible to execute any job.
+
+- `Usage` - Controls how Jenkins schedules builds on this node.
+  - `Use this node as much as possible` - In this mode, Jenkins uses this node freely.
+     Whenever there is a build that can be done by using this node, Jenkins will use it.
+  - `Only build jobs with label expressions matching this node` - In this mode, Jenkins will only build a project on this node when that project is restricted to certain nodes using a label expression, and that expression matches this node's name and/or labels.
+    This allows a node to be reserved for certain kinds of jobs. For example, if you have jobs that run performance tests, you may want them to only run on a specially configured machine,
+    while preventing all other jobs from using that machine. To do so, you would restrict where the test jobs may run by giving them a label expression matching that machine.
+    Furthermore, if you set the # of executors value to 1, you can ensure that only one performance test will execute at any given time on that machine; no other builds will interfere.
 
 - `Image ID or label expression` - identifier of server image. It could be ID of image (integer) or label expression.
   In case of label expression, it is assumed that expression resolve into exactly one result.
@@ -155,7 +166,7 @@ jenkins:
             remoteFs: /var/lib/jenkins
             location: fsn1
             image: name=jenkins
-            labelStr: java
+            mode: NORMAL
             numExecutors: 1
             connector:
               root:
