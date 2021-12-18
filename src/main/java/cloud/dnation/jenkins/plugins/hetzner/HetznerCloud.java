@@ -24,6 +24,7 @@ import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Item;
 import hudson.model.Label;
+import hudson.model.Node;
 import hudson.security.ACL;
 import hudson.slaves.AbstractCloudImpl;
 import hudson.slaves.Cloud;
@@ -86,17 +87,22 @@ public class HetznerCloud extends AbstractCloudImpl {
 
     @DataBoundSetter
     public void setServerTemplates(List<HetznerServerTemplate> serverTemplates) {
-        this.serverTemplates = serverTemplates;
+        if (serverTemplates == null) {
+            this.serverTemplates = Collections.emptyList();
+        } else {
+            this.serverTemplates = serverTemplates;
+        }
         readResolve();
     }
 
     protected Object readResolve() {
         resourceManager = HetznerCloudResourceManager.create(credentialsId);
-        if (serverTemplates != null) {
-            for (HetznerServerTemplate template : serverTemplates) {
-                template.setCloud(this);
-                template.readResolve();
-            }
+        if (serverTemplates == null) {
+            setServerTemplates(Collections.emptyList());
+        }
+        for (HetznerServerTemplate template : serverTemplates) {
+            template.setCloud(this);
+            template.readResolve();
         }
         return this;
     }
@@ -133,6 +139,7 @@ public class HetznerCloud extends AbstractCloudImpl {
                     final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
                             serverName);
                     final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
+                    agent.setMode(template.getMode());
                     plannedNodes.add(new TrackedPlannedNode(
                                     provisioningId,
                                     agent.getNumExecutors(),
@@ -157,10 +164,14 @@ public class HetznerCloud extends AbstractCloudImpl {
     }
 
     private List<HetznerServerTemplate> getTemplates(Label label) {
-        if (label == null || serverTemplates == null) {
-            return Collections.emptyList();
-        }
-        return serverTemplates.stream().filter(t -> label.matches(t.getLabels()))
+        return serverTemplates.stream().filter(t -> {
+                    //no labels has been provided in template
+                    if (t.getLabels().isEmpty()) {
+                        return t.getMode() != null && t.getMode() == Node.Mode.NORMAL;
+                    } else {
+                        return label.matches(t.getLabels());
+                    }
+                })
                 .collect(Collectors.toList());
     }
 

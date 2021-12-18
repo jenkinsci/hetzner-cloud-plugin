@@ -19,6 +19,7 @@ import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
 import com.trilead.ssh2.crypto.PEMDecoder;
 import hudson.security.ACL;
@@ -133,6 +134,13 @@ public class Helper {
                 "No SSH credentials found with ID '%s'", credentialsId);
 
         return privateKey;
+    }
+
+    public static String getStringOrDefault(String value, String defValue) {
+        if(Strings.isNullOrEmpty(value)) {
+            return defValue;
+        }
+        return value;
     }
 
     @RequiredArgsConstructor

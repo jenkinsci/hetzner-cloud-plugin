@@ -22,6 +22,7 @@
     <f:entry title="${%Labels}" field="labelStr">
         <f:textbox/>
     </f:entry>
+    <f:slave-mode name="mode" node="${instance}" />
     <f:entry title="${%Image ID or label expression}" field="image">
         <f:textbox/>
         <f:validateButton title="${%Verify image}" progress="${%Testing...}" method="verifyImage"

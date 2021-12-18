@@ -46,6 +46,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.assertSshKey;
+import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
+import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REMOTE_FS;
 import static hudson.plugins.sshslaves.SSHLauncher.AGENT_JAR;
 
 @RequiredArgsConstructor
@@ -56,12 +58,7 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
     private final AbstractHetznerSshConnector connector;
 
     private static String getRemoteFs(HetznerServerAgent agent) {
-        final String res;
-        if (Strings.isNullOrEmpty(agent.getRemoteFS())) {
-            res = HetznerConstants.DEFAULT_REMOTE_FS;
-        } else {
-            res = agent.getRemoteFS();
-        }
+        final String res = getStringOrDefault(agent.getRemoteFS(), DEFAULT_REMOTE_FS);
         //trim trailing slash
         if (res.endsWith("/")) {
             return res.substring(0, res.length() - 1);
@@ -141,7 +138,6 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
                 connection.close();
             }
         });
-
     }
 
     private Connection setupConnection(HetznerServerAgent node,
