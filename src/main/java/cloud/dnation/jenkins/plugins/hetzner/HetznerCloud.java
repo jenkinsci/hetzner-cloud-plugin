@@ -167,9 +167,13 @@ public class HetznerCloud extends AbstractCloudImpl {
         return serverTemplates.stream().filter(t -> {
                     //no labels has been provided in template
                     if (t.getLabels().isEmpty()) {
-                        return t.getMode() != null && t.getMode() == Node.Mode.NORMAL;
+                        return Node.Mode.NORMAL.equals(t.getMode());
                     } else {
-                        return label.matches(t.getLabels());
+                        if (Node.Mode.NORMAL.equals(t.getMode())) {
+                            return label == null || label.matches(t.getLabels());
+                        } else {
+                            return label != null && label.matches(t.getLabels());
+                        }
                     }
                 })
                 .collect(Collectors.toList());

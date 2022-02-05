@@ -113,4 +113,20 @@ public class HetznerCloudSimpleTest {
         Cloud.CloudState cloudState = new Cloud.CloudState(new LabelAtom("java"), 1);
         assertTrue(cloud.canProvision(cloudState));
     }
+
+    //see https://github.com/jenkinsci/hetzner-cloud-plugin/issues/15
+    @Test
+    public void testCanProvisionNullJobLabel() {
+        HetznerServerTemplate tmpl1 = new HetznerServerTemplate("tmpl1", null, "img1", "fsn1", "cx31");
+        tmpl1.setMode(Node.Mode.NORMAL);
+        HetznerServerTemplate tmpl2 = new HetznerServerTemplate("tmpl1", "label2,label3", "img1", "fsn1", "cx31");
+        tmpl2.setMode(Node.Mode.EXCLUSIVE);
+        final HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-credentials", "10",
+                Lists.newArrayList(tmpl1, tmpl2)
+        );
+        Cloud.CloudState cloudState = new Cloud.CloudState(null, 1);
+        assertTrue(cloud.canProvision(cloudState));
+        Cloud.CloudState cloudState2 = new Cloud.CloudState(new LabelAtom("label3"), 1);
+        assertTrue(cloud.canProvision(cloudState2));
+    }
 }
