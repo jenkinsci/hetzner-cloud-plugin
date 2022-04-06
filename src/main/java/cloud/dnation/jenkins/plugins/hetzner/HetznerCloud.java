@@ -118,7 +118,6 @@ public class HetznerCloud extends AbstractCloudImpl {
     @Override
     public Collection<PlannedNode> provision(CloudState state, int excessWorkload) {
         log.debug("provision(cloud={},label={},excessWorkload={})", name, state.getLabel(), excessWorkload);
-        int available = getInstanceCap() - runningNodeCount();
         final List<PlannedNode> plannedNodes = new ArrayList<>();
         final Label label = state.getLabel();
         final List<HetznerServerTemplate> matchingTemplates = getTemplates(label);
@@ -129,11 +128,16 @@ public class HetznerCloud extends AbstractCloudImpl {
                     log.warn("Jenkins is going down, no new nodes will be provisioned");
                     break;
                 }
+                int running = runningNodeCount();
+                int instanceCap = getInstanceCap();
+                int available = instanceCap - running;
+                final HetznerServerTemplate template = pickTemplate(matchingTemplates);
+                log.info("Creating new agent with {} executors, have {} running VMs", template.getNumExecutors(), running);
                 if (available <= 0) {
-                    log.warn("Cloud capacity reached. Has {} but want {} more", getInstanceCap(), excessWorkload);
+                    log.warn("Cloud capacity reached ({}). Has {} VMs running, but want {} more executors",
+                            instanceCap, running , excessWorkload);
                     break;
                 } else {
-                    final HetznerServerTemplate template = pickTemplate(matchingTemplates);
                     final String serverName = "hcloud-" + RandomStringUtils.randomAlphanumeric(16)
                             .toLowerCase(Locale.ROOT);
                     final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
@@ -148,7 +152,6 @@ public class HetznerCloud extends AbstractCloudImpl {
                             )
                     );
                     excessWorkload -= agent.getNumExecutors();
-                    available -= agent.getNumExecutors();
                 }
             }
 
