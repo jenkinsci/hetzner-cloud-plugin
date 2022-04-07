@@ -34,11 +34,6 @@ public class HetznerConstants {
     public static final String PROP_API_ENDPOINT = PROP_PREFIX + ".api-endpoint";
 
     /**
-     * Name of system property used to configure debug logging of Hetzner API client.
-     */
-    public static final String PROP_CLIENT_DEBUG = PROP_PREFIX + ".client-debug";
-
-    /**
      * Hetzner public cloud API endpoint.
      */
     public static final String DEFAULT_ENDPOINT = "https://api.hetzner.cloud/v1/";

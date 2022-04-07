@@ -38,12 +38,10 @@ public class ClientFactory {
     private static final Gson GSON = new GsonBuilder().create();
 
     private static HetznerApi create(String apiToken) {
-        final boolean debug = Boolean.TRUE.toString().equals(System.getProperty(HetznerConstants.PROP_CLIENT_DEBUG,
-                Boolean.FALSE.toString()));
-        final HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+        final HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor(log::trace);
         //noinspection UnstableApiUsage
         loggingInterceptor.redactHeader(HttpHeaders.AUTHORIZATION);
-        loggingInterceptor.setLevel(debug ? HttpLoggingInterceptor.Level.BASIC : HttpLoggingInterceptor.Level.NONE);
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         final OkHttpClient client = new OkHttpClient.Builder()
                 .connectionPool(CP)
                 .addInterceptor(new AuthenticationInterceptor(apiToken))
