@@ -75,17 +75,6 @@ public class Helper {
     }
 
     /**
-     * Get integer value of system property or default value if no such property exists.
-     *
-     * @param propName     name of property to get
-     * @param defaultValue default value to use if property is not defined
-     * @return integer value of property
-     */
-    public static int getIntPropOrDefault(String propName, int defaultValue) {
-        return Integer.parseInt(System.getProperty(propName, String.valueOf(defaultValue)));
-    }
-
-    /**
      * Check if given string could possibly be label expression.
      *
      * @param expression string to check
