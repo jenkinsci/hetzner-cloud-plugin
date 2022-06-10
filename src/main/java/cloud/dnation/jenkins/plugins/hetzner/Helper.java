@@ -15,6 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
@@ -39,6 +40,8 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPublicKey;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -47,6 +50,8 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.SimpleFormatter;
+
+import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.SHUTDOWN_TIME_BUFFER;
 
 @UtilityClass
 public class Helper {
@@ -153,5 +158,29 @@ public class Helper {
             rec.setThrown(cause);
             stream.println(FORMATTER.format(rec));
         }
+    }
+
+    /**
+     * Check if idle server can be shut down.
+     * <p>
+     * According to <a href="https://docs.hetzner.com/cloud/billing/faq#how-do-you-bill-your-servers">Hetzner billing policy</a>,
+     * you are billed for every hour of existence of server, so it makes sense to keep server running as long as next hour did
+     * not start yet.
+     *
+     * @param createdStr    RFC3339-formatted instant when server was created. See ServerDetail#getCreated().
+     * @param currentMinute current minute. Kept as argument to allow unit-testing.
+     * @return <code>true</code> if server should be shut down, <code>false</code> otherwise.
+     * Note: we keep small time buffer for corner cases like clock skew or Jenkins's queue manager overload, which could
+     * lead to unnecessary 1-hour over-billing.
+     */
+    public static boolean canShutdownServer(@Nonnull String createdStr, int currentMinute) {
+        int billingMinute = LocalDateTime.from(DateTimeFormatter.ISO_DATE_TIME.parse(createdStr)).getMinute();
+        if (billingMinute < SHUTDOWN_TIME_BUFFER) {
+            billingMinute += 60;
+        }
+        if (currentMinute < SHUTDOWN_TIME_BUFFER) {
+            currentMinute += 60;
+        }
+        return(currentMinute < billingMinute) && (currentMinute >= (billingMinute - SHUTDOWN_TIME_BUFFER));
     }
 }

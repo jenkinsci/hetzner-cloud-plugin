@@ -15,8 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.shutdown.IdlePeriodPolicy;
 import com.google.common.collect.ImmutableSet;
-import hudson.slaves.CloudRetentionStrategy;
 import lombok.experimental.UtilityClass;
 
 import java.util.Set;
@@ -82,7 +82,13 @@ public class HetznerConstants {
             .build();
 
     /**
-     * Default retention strategy to use.
+     * Default shutdown policy to use.
      */
-    static final CloudRetentionStrategy DEFAULT_RETENTION_STRATEGY = new CloudRetentionStrategy(10);
+    static final IdlePeriodPolicy DEFAULT_SHUTDOWN_POLICY = new IdlePeriodPolicy(10);
+
+    /*
+     * Arbitrary value in minutes which gives us some time to shut down server before usage hour wraps.
+     */
+    public static final int SHUTDOWN_TIME_BUFFER = 5;
+
 }

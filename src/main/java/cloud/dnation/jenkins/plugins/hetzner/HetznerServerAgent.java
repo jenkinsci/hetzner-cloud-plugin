@@ -16,7 +16,6 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.jenkins.plugins.hetzner.launcher.HetznerServerComputerLauncher;
-import com.google.common.base.Strings;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;
@@ -60,11 +59,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
         setLabelString(template.getLabelStr());
         setNumExecutors(template.getNumExecutors());
         setMode(template.getMode() == null ? Mode.EXCLUSIVE : template.getMode());
-        if (Strings.isNullOrEmpty(template.getKeepAroundMinutes())) {
-            setRetentionStrategy(HetznerConstants.DEFAULT_RETENTION_STRATEGY);
-        } else {
-            setRetentionStrategy(new CloudRetentionStrategy(Integer.parseInt(template.getKeepAroundMinutes())));
-        }
+        setRetentionStrategy(template.getShutdownPolicy().getRetentionStrategy());
         readResolve();
     }
 
