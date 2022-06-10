@@ -122,7 +122,9 @@ These additional attributes can be specified, but are not required:
 
 - `Number of Executors`
 
-- `Keep around minutes` - Time that agent will be kept online after it become idle.
+- `Shutdown policy` - Defines how agent will be shut down after it becomes idle
+  - `Removes server after it's idle for period of time` - you can define how many minutes will idle agent kept around
+  - `Removes idle server just before current hour of billing cycle completes`
 
 ### Scripted configuration using Groovy
 
@@ -171,6 +173,7 @@ jenkins:
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
+            shutdownPolicy: "hour-wrap"
           - name: ubuntu2-cx31
             serverType: cx31
             remoteFs: /var/lib/jenkins
@@ -182,6 +185,9 @@ jenkins:
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
+            shutdownPolicy:
+              idle:
+                idleMinutes: 10
 credentials:
   system:
     domainCredentials:

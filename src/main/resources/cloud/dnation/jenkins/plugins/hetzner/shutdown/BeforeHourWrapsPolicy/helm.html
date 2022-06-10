@@ -1,5 +1,5 @@
 <!--
-     Copyright 2021 https://dnation.cloud
+     Copyright 2022 https://dnation.cloud
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -14,6 +14,6 @@
  limitations under the License.
 -->
 <div>
-    When empty, server will be kept alive for 10 minutes after being used.
-    This field allows to override this retention period.
+    Server will be kept alive until current hour of billing cycle completes.
+    Make sure that Jenkins controller's clock are configured correctly as skew may lead to 1 hour over-billing.
 </div>
