@@ -36,7 +36,7 @@ public class OrphanedNodesCleaner extends PeriodicWork {
         return HOUR;
     }
 
-    private Set<HetznerCloud> getHetznerClouds() {
+    private static Set<HetznerCloud> getHetznerClouds() {
         return Jenkins.get().clouds.stream()
                 .filter(HetznerCloud.class::isInstance)
                 .map(HetznerCloud.class::cast)
@@ -45,17 +45,19 @@ public class OrphanedNodesCleaner extends PeriodicWork {
 
     @Override
     protected void doRun() throws Exception {
-        getHetznerClouds().forEach(this::cleanCloud);
+        doCleanup();
     }
 
-    private void cleanCloud(HetznerCloud cloud) {
+    static void doCleanup() {
+        getHetznerClouds().forEach(OrphanedNodesCleaner::cleanCloud);
+    }
+
+    private static void cleanCloud(HetznerCloud cloud) {
         try {
             final List<ServerDetail> allInstances = cloud.getResourceManager()
                     .fetchAllServers(cloud.name);
-            final List<String> jenkinsNodes = Jenkins.get().getNodes()
+            final List<String> jenkinsNodes = Helper.getHetznerAgents()
                     .stream()
-                    .filter(HetznerServerAgent.class::isInstance)
-                    .map(HetznerServerAgent.class::cast)
                     .map(HetznerServerAgent::getNodeName)
                     .collect(Collectors.toList());
             allInstances.stream().filter(server -> !jenkinsNodes.contains(server.getName()))
@@ -65,7 +67,7 @@ public class OrphanedNodesCleaner extends PeriodicWork {
         }
     }
 
-    private void terminateServer(ServerDetail serverDetail, HetznerCloud cloud) {
+    private static void terminateServer(ServerDetail serverDetail, HetznerCloud cloud) {
         log.info("Terminating orphaned server {}", serverDetail.getName());
         cloud.getResourceManager().destroyServer(serverDetail);
     }
