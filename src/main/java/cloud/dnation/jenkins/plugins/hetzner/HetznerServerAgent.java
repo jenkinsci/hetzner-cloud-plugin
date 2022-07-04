@@ -79,7 +79,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
     }
 
     @Override
-    protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
+    protected void _terminate(TaskListener listener) {
         ((HetznerServerComputerLauncher) getLauncher()).signalTermination();
         cloud.getResourceManager().destroyServer(serverInstance.getServerDetail());
         Optional.ofNullable(CloudStatistics.get().getActivityFor(this))

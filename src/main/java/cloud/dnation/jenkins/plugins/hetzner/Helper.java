@@ -50,6 +50,7 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.SimpleFormatter;
+import java.util.stream.Collectors;
 
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.SHUTDOWN_TIME_BUFFER;
 
@@ -182,5 +183,18 @@ public class Helper {
             currentMinute += 60;
         }
         return(currentMinute < billingMinute) && (currentMinute >= (billingMinute - SHUTDOWN_TIME_BUFFER));
+    }
+
+    /**
+     * Get all nodes that are {@link HetznerServerAgent}.
+     *
+     * @return list of all {@link HetznerServerAgent} nodes
+     */
+    public static List<HetznerServerAgent> getHetznerAgents() {
+        return Jenkins.get().getNodes()
+                .stream()
+                .filter(HetznerServerAgent.class::isInstance)
+                .map(HetznerServerAgent.class::cast)
+                .collect(Collectors.toList());
     }
 }
