@@ -57,5 +57,7 @@
             <f:textbox default="1"/>
         </f:entry>
         <f:dropdownDescriptorSelector field="shutdownPolicy" title="Shutdown policy"/>
+
+        <f:dropdownDescriptorSelector field="primaryIp" title="Primary IP" />
     </f:advanced>
 </j:jelly>

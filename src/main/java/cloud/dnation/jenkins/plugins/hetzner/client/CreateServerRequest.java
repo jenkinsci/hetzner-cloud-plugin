@@ -37,4 +37,6 @@ public class CreateServerRequest {
     @SerializedName("ssh_keys")
     private List<String> sshKeys;
     private List<Integer> networks;
+    @SerializedName("public_net")
+    private PublicNetRequest publicNet;
 }
