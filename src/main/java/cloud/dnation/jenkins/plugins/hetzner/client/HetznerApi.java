@@ -174,4 +174,15 @@ public interface HetznerApi {
      */
     @GET("/v1/networks/{id}")
     Call<GetNetworkByIdResponse> getNetworkById(@Path("id") int id);
+
+    /**
+     * Get all Primary IP objects.
+     *
+     * @param selector Can be used to filter resources by labels.
+     *                 The response will only contain resources matching the label selector.
+     * @return  returns all Primary IP objects.
+     * see <a href="https://docs.hetzner.cloud/#primary-ips-get-all-primary-ips">API reference</a>
+     */
+    @GET("/v1/primary_ips")
+    Call<GetAllPrimaryIpsResponse> getAllPrimaryIps(@Query("label_selector") String selector);
 }
