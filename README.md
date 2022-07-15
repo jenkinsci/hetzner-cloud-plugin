@@ -127,7 +127,7 @@ These additional attributes can be specified, but are not required:
   - `Removes idle server just before current hour of billing cycle completes`
 
 - `Primary IP` - Defines how Primary IP is allocated to the server
-  - `Don't allocate any primary IP` - no Primary IP is allocated
+  - `Use default behavior` - use Hetzner cloud's default behavior
   - `Allocate primary IPv4 using label selector, fail if none is available` - Primary IP is searched using provided label selector in same location as server. 
      If no address is available or any error occurs, problem is propagated and provisioning of agent will fail.
   - `Allocate primary IPv4 using label selector, ignore any error` - Primary IP is searched using provided label selector in same location as server.
