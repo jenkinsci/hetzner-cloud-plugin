@@ -24,10 +24,10 @@ import hudson.model.Descriptor;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-public class NoAllocationStrategy extends AbstractPrimaryIpStrategy {
-    public static final NoAllocationStrategy SINGLETON = new NoAllocationStrategy();
+public class DefaultStrategy extends AbstractPrimaryIpStrategy {
+    public static final DefaultStrategy SINGLETON = new DefaultStrategy();
     @DataBoundConstructor
-    public NoAllocationStrategy() {
+    public DefaultStrategy() {
         super(false);
     }
 
@@ -37,7 +37,7 @@ public class NoAllocationStrategy extends AbstractPrimaryIpStrategy {
     }
 
     @Extension
-    @Symbol("noallocation")
+    @Symbol("default")
     public static final class DescriptorImpl extends Descriptor<AbstractPrimaryIpStrategy> {
         @NonNull
         @Override
