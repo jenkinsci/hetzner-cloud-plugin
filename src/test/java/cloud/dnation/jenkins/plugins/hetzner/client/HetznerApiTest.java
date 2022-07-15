@@ -28,6 +28,7 @@ import java.io.IOException;
 
 import static cloud.dnation.jenkins.plugins.hetzner.TestHelper.resourceAsString;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class HetznerApiTest {
     private static MockWebServer ws;
@@ -90,5 +91,15 @@ public class HetznerApiTest {
         GetNetworksBySelectorResponse result = call.execute().body();
         assertEquals(0, result.getNetworks().size());
         assertEquals("0", result.getMeta().getPagination().getTotalEntries());
+    }
+
+    @Test
+    public void testGetPrimaryIpsBySelector() throws IOException {
+        ws.enqueue(new MockResponse().setBody(resourceAsString("get-primary-ips-by-selector.json")));
+        Call<GetAllPrimaryIpsResponse> call = api.getAllPrimaryIps("jenkins");
+        GetAllPrimaryIpsResponse result = call.execute().body();
+        assertEquals(1, result.getIps().size());
+        assertEquals("1.2.3.4", result.getIps().get(0).getIp());
+        assertNull(result.getIps().get(0).getAssigneeId());
     }
 }
