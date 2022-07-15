@@ -126,6 +126,13 @@ These additional attributes can be specified, but are not required:
   - `Removes server after it's idle for period of time` - you can define how many minutes will idle agent kept around
   - `Removes idle server just before current hour of billing cycle completes`
 
+- `Primary IP` - Defines how Primary IP is allocated to the server
+  - `Don't allocate any primary IP` - no Primary IP is allocated
+  - `Allocate primary IPv4 using label selector, fail if none is available` - Primary IP is searched using provided label selector in same location as server. 
+     If no address is available or any error occurs, problem is propagated and provisioning of agent will fail.
+  - `Allocate primary IPv4 using label selector, ignore any error` - Primary IP is searched using provided label selector in same location as server.
+    If no address is available or any error occurs, problem is logged, but provisioning of agent will continue without Primary IP being allocated.
+
 ### Scripted configuration using Groovy
 
 ```groovy

@@ -16,6 +16,7 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.jenkins.plugins.hetzner.client.*;
+import cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractPrimaryIpStrategy;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -227,6 +228,7 @@ public class HetznerCloudResourceManager {
                 createServerRequest.setLocation(agent.getTemplate().getLocation());
             }
             createServerRequest.setLabels(createLabelsForServer(agent.getTemplate().getCloud().name));
+            Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
             final Response<CreateServerResponse> createServerResponse = proxy().createServer(createServerRequest)
                     .execute();
             final HetznerServerInfo info = new HetznerServerInfo(sshKey);
