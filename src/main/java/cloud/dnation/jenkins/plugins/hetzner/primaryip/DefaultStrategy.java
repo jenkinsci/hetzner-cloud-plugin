@@ -42,7 +42,7 @@ public class DefaultStrategy extends AbstractPrimaryIpStrategy {
         @NonNull
         @Override
         public String getDisplayName() {
-            return Messages.primaryip_noallocation();
+            return Messages.primaryip_default();
         }
     }
 }
