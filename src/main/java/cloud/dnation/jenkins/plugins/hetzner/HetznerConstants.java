@@ -15,6 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractConnectionMethod;
+import cloud.dnation.jenkins.plugins.hetzner.launcher.DefaultConnectionMethod;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.IdlePeriodPolicy;
 import com.google.common.collect.ImmutableSet;
 import lombok.experimental.UtilityClass;
@@ -90,5 +92,7 @@ public class HetznerConstants {
      * Arbitrary value in minutes which gives us some time to shut down server before usage hour wraps.
      */
     public static final int SHUTDOWN_TIME_BUFFER = 5;
+
+    static final AbstractConnectionMethod DEFAULT_CONNECTION_METHOD = DefaultConnectionMethod.SINGLETON;
 
 }

@@ -81,13 +81,17 @@ Following attributes are **required** for each server template:
 
 - `Name` - name of template, should match regex `[a-zA-Z0-9][a-zA-Z\-_0-9]`
 
-- `Connect method` this attribute specifies how Jenkins master will connect to newly provisioned server. These methods are supported:
+- `Connection method` this attribute specifies how Jenkins controller will connect to newly provisioned agent. These methods are supported:
   - `Connect as root` - SSH connection to provisioned server will be done as `root` user.
      This is convenient method due to fact, that Hetzner cloud allows us to specify SSH key for `root` user during server creation.
      Once connection is established, Jenkins agent will be launched by non-root user specified in chosen credentials.
      User must already exist.
   - `Connect as user specified in credentials` - again, that user must already be known to server and its `~/.ssh/authorized_keys` must contain public key counterpart of chosen SSH credentials.
      See bellow how server image can pre created using Hashicorp packer, which also can be used to populate public SSH key.
+
+  In both cases, selection of IP address can be specified as one of
+    - `Connect using private IPv4 address if available, otherwise using public IPv4 address`
+    - `Connect using public IPv4 address only`
 - `Labels` - Labels that identifies jobs that could run on node created from this template.
   Multiple values can be specified when separated by space.
   When no labels are specified and usage mode is set to <strong>Use this node as much as possible</strong>,
@@ -180,6 +184,7 @@ jenkins:
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
+                connectionMethod: "default"
             shutdownPolicy: "hour-wrap"
           - name: ubuntu2-cx31
             serverType: cx31
@@ -192,6 +197,7 @@ jenkins:
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
+                connectionMethod: "public"
             shutdownPolicy:
               idle:
                 idleMinutes: 10

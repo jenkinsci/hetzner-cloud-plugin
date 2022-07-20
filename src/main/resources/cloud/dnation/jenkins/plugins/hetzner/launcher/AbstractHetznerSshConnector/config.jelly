@@ -18,4 +18,5 @@
     <f:entry field="sshCredentialsId" title="${%SSHKey}">
         <c:select checkMethod="post" />
     </f:entry>
+    <f:dropdownDescriptorSelector field="connectionMethod" title="IP address selection" />
 </j:jelly>
