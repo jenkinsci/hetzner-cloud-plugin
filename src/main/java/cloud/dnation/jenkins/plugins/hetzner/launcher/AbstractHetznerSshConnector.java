@@ -27,7 +27,6 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.kohsuke.accmod.Restricted;
@@ -37,7 +36,6 @@ import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collections;
 
@@ -56,6 +54,10 @@ public abstract class AbstractHetznerSshConnector extends AbstractDescribableImp
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
     protected String sshCredentialsId;
+
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    protected AbstractConnectionMethod connectionMethod = DefaultConnectionMethod.SINGLETON;
 
     public HetznerServerComputerLauncher createLauncher() {
         return new HetznerServerComputerLauncher(this);

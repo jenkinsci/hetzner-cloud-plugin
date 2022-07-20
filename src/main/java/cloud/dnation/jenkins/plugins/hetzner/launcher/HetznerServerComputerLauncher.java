@@ -146,12 +146,7 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         int retries = 10;
         while (!terminated.get() && retries-- > 0) {
             final ServerDetail serverDetail = node.getServerInstance().getServerDetail();
-            final String ipv4;
-            if (serverDetail.getPrivateNet() != null && !serverDetail.getPrivateNet().isEmpty()) {
-                ipv4 = serverDetail.getPrivateNet().get(0).getIp();
-            } else {
-                ipv4 = serverDetail.getPublicNet().getIpv4().getIp();
-            }
+            final String ipv4 = connector.getConnectionMethod().getAddress(serverDetail);
             final Connection conn = new Connection(ipv4, 22);
             try {
                 conn.connect(AllowAnyServerHostKeyVerifier.INSTANCE,
