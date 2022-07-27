@@ -89,6 +89,9 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         if (!(computer instanceof HetznerServerComputer)) {
             throw new AbortException("Incompatible computer : " + computer);
         }
+        if(connector.getConnectionMethod() == null) {
+            connector.setConnectionMethod(HetznerConstants.DEFAULT_CONNECTION_METHOD);
+        }
         final HetznerServerComputer hcomputer = (HetznerServerComputer) computer;
         final Helper.LogAdapter logger = new Helper.LogAdapter(listener.getLogger(), log);
         final HetznerServerAgent node = hcomputer.getNode();

@@ -93,6 +93,6 @@ public class HetznerConstants {
      */
     public static final int SHUTDOWN_TIME_BUFFER = 5;
 
-    static final AbstractConnectionMethod DEFAULT_CONNECTION_METHOD = DefaultConnectionMethod.SINGLETON;
+    public static final AbstractConnectionMethod DEFAULT_CONNECTION_METHOD = DefaultConnectionMethod.SINGLETON;
 
 }
