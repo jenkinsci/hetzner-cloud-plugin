@@ -55,7 +55,7 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
             final HetznerServerAgent agent = (HetznerServerAgent) c.getNode();
             if (c.isIdle() && agent != null && agent.getServerInstance() != null) {
                 if (Helper.canShutdownServer(agent.getServerInstance().getServerDetail().getCreated(),
-                        LocalDateTime.now().getMinute())) {
+                        LocalDateTime.now())) {
                     log.info("Disconnecting {}", c.getName());
                     try {
                         agent.terminate();
