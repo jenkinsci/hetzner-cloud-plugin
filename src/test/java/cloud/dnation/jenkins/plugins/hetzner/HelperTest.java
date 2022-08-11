@@ -15,9 +15,12 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import com.google.common.base.Strings;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import static org.junit.Assert.*;
 
@@ -29,22 +32,28 @@ public class HelperTest {
         assertEquals(pubKeyStr, Helper.getSSHPublicKeyFromPrivate(privKeyStr, null));
     }
 
+    private static LocalDateTime time(String str) {
+        return LocalDateTime.from(DateTimeFormatter.ISO_DATE_TIME.parse(str + "+02:00"));
+    }
     @Test
     public void testCanShutdownServer() {
         //server started at 10:41 UTC, so it can be shutdown in minutes 36-40
         String str = "2022-05-21T10:41:19+00:00";
-        assertFalse(Helper.canShutdownServer(str, 50));
-        assertTrue(Helper.canShutdownServer(str, 36));
-        assertTrue(Helper.canShutdownServer(str, 40));
-        assertFalse(Helper.canShutdownServer(str, 41));
-        //server started at 10:01 so it can be shutdown in minutes 56-00
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:50:11")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-05-21T11:36:19")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-05-21T11:40:13")));
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:41:14")));
+        //server started at 10:01, so it can be shutdown in minutes 56-00
         str = "2022-05-21T10:01:19+00:00";
-        assertFalse(Helper.canShutdownServer(str, 55));
-        assertTrue(Helper.canShutdownServer(str, 56));
-        assertTrue(Helper.canShutdownServer(str, 59));
-        assertTrue(Helper.canShutdownServer(str, 0));
-        assertFalse(Helper.canShutdownServer(str, 1));
-        assertFalse(Helper.canShutdownServer(str, 32));
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:55:15")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-05-21T10:56:19")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-05-21T10:59:17")));
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:00:18")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-05-21T11:00:18")));
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:01:19")));
+        assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:32:20")));
+        str = "2022-08-08T11:03:55+00:00";
+        assertFalse(Helper.canShutdownServer(str, time("2022-08-08T11:03:02")));
+        assertTrue(Helper.canShutdownServer(str, time("2022-08-08T11:59:02")));
     }
-
 }
