@@ -18,7 +18,6 @@ package cloud.dnation.jenkins.plugins.hetzner.launcher;
 import cloud.dnation.jenkins.plugins.hetzner.Messages;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
-import hudson.model.Descriptor;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 

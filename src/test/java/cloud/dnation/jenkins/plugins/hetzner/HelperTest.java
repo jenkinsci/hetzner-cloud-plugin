@@ -15,14 +15,15 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import com.google.common.base.Strings;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class HelperTest {
     @Test
@@ -35,6 +36,7 @@ public class HelperTest {
     private static LocalDateTime time(String str) {
         return LocalDateTime.from(DateTimeFormatter.ISO_DATE_TIME.parse(str + "+02:00"));
     }
+
     @Test
     public void testCanShutdownServer() {
         //server started at 10:41 UTC, so it can be shutdown in minutes 36-40

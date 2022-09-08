@@ -30,7 +30,11 @@ import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.util.FormValidation;
 import jenkins.model.Jenkins;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
 import org.kohsuke.accmod.Restricted;
@@ -43,9 +47,12 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
 import java.io.IOException;
 import java.util.Set;
 
-import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.*;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckNonEmpty;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckPositiveInt;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyImage;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyLocation;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyNetwork;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyServerType;
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REMOTE_FS;
 

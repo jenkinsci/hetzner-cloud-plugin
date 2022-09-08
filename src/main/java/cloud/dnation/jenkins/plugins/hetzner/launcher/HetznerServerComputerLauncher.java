@@ -23,7 +23,6 @@ import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.trilead.ssh2.Connection;
 import com.trilead.ssh2.SCPClient;

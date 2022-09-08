@@ -19,7 +19,6 @@ import com.google.gson.annotations.SerializedName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
