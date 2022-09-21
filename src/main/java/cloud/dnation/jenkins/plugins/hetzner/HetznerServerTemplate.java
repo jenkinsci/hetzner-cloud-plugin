@@ -18,7 +18,6 @@ package cloud.dnation.jenkins.plugins.hetzner;
 import cloud.dnation.jenkins.plugins.hetzner.connect.AbstractConnectivity;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractHetznerSshConnector;
 import cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractPrimaryIpStrategy;
-import cloud.dnation.jenkins.plugins.hetzner.primaryip.DefaultStrategy;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.AbstractShutdownPolicy;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.IdlePeriodPolicy;
 import com.google.common.base.Strings;
@@ -154,7 +153,7 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
             shutdownPolicy = HetznerConstants.DEFAULT_SHUTDOWN_POLICY;
         }
         if (primaryIp == null) {
-            primaryIp = DefaultStrategy.SINGLETON;
+            primaryIp = HetznerConstants.DEFAULT_PRIMARY_IP_STRATEGY;
         }
         if (connectivity == null ) {
             connectivity = HetznerConstants.DEFAULT_CONNECTIVITY;
