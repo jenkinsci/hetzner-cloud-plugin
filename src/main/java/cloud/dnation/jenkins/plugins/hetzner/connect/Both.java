@@ -19,13 +19,14 @@ import cloud.dnation.jenkins.plugins.hetzner.Messages;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;
+import lombok.NoArgsConstructor;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
+@NoArgsConstructor(onConstructor = @__({@DataBoundConstructor}))
 public class Both extends AbstractConnectivity{
-    @DataBoundConstructor
-    public Both() {
-        super(ConnectivityType.BOTH);
+    public ConnectivityType getType() {
+        return ConnectivityType.BOTH;
     }
 
     @Extension

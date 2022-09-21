@@ -16,14 +16,7 @@
 package cloud.dnation.jenkins.plugins.hetzner.connect;
 
 import hudson.model.AbstractDescribableImpl;
-import lombok.Getter;
 
 public abstract class AbstractConnectivity extends AbstractDescribableImpl<AbstractConnectivity> {
-
-    public AbstractConnectivity(ConnectivityType type) {
-        this.type = type;
-    }
-
-    @Getter
-    protected final transient ConnectivityType type;
+    public abstract ConnectivityType getType();
 }

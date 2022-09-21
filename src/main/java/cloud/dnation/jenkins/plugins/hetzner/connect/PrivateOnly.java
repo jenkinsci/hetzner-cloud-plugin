@@ -19,15 +19,15 @@ import cloud.dnation.jenkins.plugins.hetzner.Messages;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;
+import lombok.NoArgsConstructor;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
+@NoArgsConstructor(onConstructor = @__({@DataBoundConstructor}))
 public class PrivateOnly extends AbstractConnectivity {
-    @DataBoundConstructor
-    public PrivateOnly() {
-        super(ConnectivityType.PRIVATE);
+    public ConnectivityType getType() {
+        return ConnectivityType.PRIVATE;
     }
-
     @Extension
     @Symbol("private-only")
     public static final class DescriptorImpl extends Descriptor<AbstractConnectivity> {

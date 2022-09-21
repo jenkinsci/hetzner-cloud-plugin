@@ -29,6 +29,7 @@ import cloud.dnation.jenkins.plugins.hetzner.client.GetSshKeysBySelectorResponse
 import cloud.dnation.jenkins.plugins.hetzner.client.HetznerApi;
 import cloud.dnation.jenkins.plugins.hetzner.client.IdentifiableResource;
 import cloud.dnation.jenkins.plugins.hetzner.client.Meta;
+import cloud.dnation.jenkins.plugins.hetzner.client.PublicNetRequest;
 import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import cloud.dnation.jenkins.plugins.hetzner.client.SshKeyDetail;
 import cloud.dnation.jenkins.plugins.hetzner.connect.ConnectivityType;
@@ -240,6 +241,12 @@ public class HetznerCloudResourceManager {
                         networkId = Integer.parseInt(agent.getTemplate().getNetwork());
                     } else {
                         networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
+                    }
+                    if (ct == ConnectivityType.PRIVATE) {
+                        final PublicNetRequest pn = new PublicNetRequest();
+                        pn.setEnableIpv4(false);
+                        pn.setEnableIpv6(false);
+                        createServerRequest.setPublicNet(pn);
                     }
                     createServerRequest.setNetworks(Lists.newArrayList(networkId));
                 }

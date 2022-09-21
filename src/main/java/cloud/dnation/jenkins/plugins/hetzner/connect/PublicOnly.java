@@ -19,13 +19,14 @@ import cloud.dnation.jenkins.plugins.hetzner.Messages;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;
+import lombok.NoArgsConstructor;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-public class PublicOnly extends AbstractConnectivity{
-    @DataBoundConstructor
-    public PublicOnly() {
-        super(ConnectivityType.PUBLIC);
+@NoArgsConstructor(onConstructor = @__({@DataBoundConstructor}))
+public class PublicOnly extends AbstractConnectivity {
+    public ConnectivityType getType() {
+        return ConnectivityType.PUBLIC;
     }
 
     @Extension
