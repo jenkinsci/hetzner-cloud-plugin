@@ -15,6 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.connect.AbstractConnectivity;
+import cloud.dnation.jenkins.plugins.hetzner.connect.Both;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractConnectionMethod;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.DefaultConnectionMethod;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.IdlePeriodPolicy;
@@ -95,4 +97,8 @@ public class HetznerConstants {
 
     public static final AbstractConnectionMethod DEFAULT_CONNECTION_METHOD = DefaultConnectionMethod.SINGLETON;
 
+    /**
+     * Default networking setup.
+     */
+    public static final AbstractConnectivity DEFAULT_CONNECTIVITY = new Both();
 }

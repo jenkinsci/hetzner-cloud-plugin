@@ -137,6 +137,11 @@ These additional attributes can be specified, but are not required:
   - `Allocate primary IPv4 using label selector, ignore any error` - Primary IP is searched using provided label selector in same location as server.
     If no address is available or any error occurs, problem is logged, but provisioning of agent will continue without Primary IP being allocated.
 
+- `Connectivity` - defines how network connectivity will be configured on newly created server
+  - `Only private networking will be used` - network ID or labels expression must also be provided
+  - `Only public networking will be allocated` - public IP address will be allocated to the server
+  - `Configure both private and public networking`
+
 ### Scripted configuration using Groovy
 
 ```groovy
@@ -194,6 +199,7 @@ jenkins:
             network: subsystem=cd
             labelStr: java
             numExecutors: 3
+            connectivity: "public-only"
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'

@@ -15,6 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.connect.AbstractConnectivity;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractHetznerSshConnector;
 import cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractPrimaryIpStrategy;
 import cloud.dnation.jenkins.plugins.hetzner.primaryip.DefaultStrategy;
@@ -122,6 +123,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Setter(onMethod = @__({@DataBoundSetter}))
     private AbstractPrimaryIpStrategy primaryIp;
 
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private AbstractConnectivity connectivity;
+
     @DataBoundConstructor
     public HetznerServerTemplate(String name, String labelStr, String image,
                                  String location, String serverType) {
@@ -150,6 +155,9 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         }
         if (primaryIp == null) {
             primaryIp = DefaultStrategy.SINGLETON;
+        }
+        if (connectivity == null ) {
+            connectivity = HetznerConstants.DEFAULT_CONNECTIVITY;
         }
         return this;
     }
