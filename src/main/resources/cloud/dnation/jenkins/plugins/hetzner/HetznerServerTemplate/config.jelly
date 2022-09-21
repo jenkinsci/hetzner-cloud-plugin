@@ -59,5 +59,7 @@
         <f:dropdownDescriptorSelector field="shutdownPolicy" title="Shutdown policy"/>
 
         <f:dropdownDescriptorSelector field="primaryIp" title="Primary IP" />
+
+        <f:dropdownDescriptorSelector field="connectivity" title="${%Connectivity}" />
     </f:advanced>
 </j:jelly>

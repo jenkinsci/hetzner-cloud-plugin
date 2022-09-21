@@ -66,7 +66,7 @@ public class PrimaryIpDetail extends IdentifiableResource{
     private String name;
 
     /**
-     * Type of the Primary IP.
+     * ConnectivityType of the Primary IP.
      */
     private String type;
 }

@@ -31,6 +31,7 @@ import cloud.dnation.jenkins.plugins.hetzner.client.IdentifiableResource;
 import cloud.dnation.jenkins.plugins.hetzner.client.Meta;
 import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import cloud.dnation.jenkins.plugins.hetzner.client.SshKeyDetail;
+import cloud.dnation.jenkins.plugins.hetzner.connect.ConnectivityType;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -231,14 +232,17 @@ public class HetznerCloudResourceManager {
             }
 
             final CreateServerRequest createServerRequest = new CreateServerRequest();
-            if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
-                final int networkId;
-                if (Helper.isPossiblyInteger(agent.getTemplate().getNetwork())) {
-                    networkId = Integer.parseInt(agent.getTemplate().getNetwork());
-                } else {
-                    networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
+            final ConnectivityType ct = agent.getTemplate().getConnectivity().getType();
+            if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PRIVATE) {
+                if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
+                    final int networkId;
+                    if (Helper.isPossiblyInteger(agent.getTemplate().getNetwork())) {
+                        networkId = Integer.parseInt(agent.getTemplate().getNetwork());
+                    } else {
+                        networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
+                    }
+                    createServerRequest.setNetworks(Lists.newArrayList(networkId));
                 }
-                createServerRequest.setNetworks(Lists.newArrayList(networkId));
             }
             createServerRequest.setServerType(agent.getTemplate().getServerType());
             createServerRequest.setImage(imageId);
@@ -250,7 +254,9 @@ public class HetznerCloudResourceManager {
                 createServerRequest.setLocation(agent.getTemplate().getLocation());
             }
             createServerRequest.setLabels(createLabelsForServer(agent.getTemplate().getCloud().name));
-            Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
+            if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC) {
+                Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
+            }
             final Response<CreateServerResponse> createServerResponse = proxy().createServer(createServerRequest)
                     .execute();
             final HetznerServerInfo info = new HetznerServerInfo(sshKey);
