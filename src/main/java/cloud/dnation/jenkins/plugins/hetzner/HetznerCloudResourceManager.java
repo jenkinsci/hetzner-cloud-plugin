@@ -54,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -68,6 +69,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.LABEL_VALUE
 public class HetznerCloudResourceManager {
     @NonNull
     private final String credentialsId;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public static HetznerCloudResourceManager create(String credentialsId) {
         return new HetznerCloudResourceManager(credentialsId);
@@ -222,6 +224,7 @@ public class HetznerCloudResourceManager {
      */
     public HetznerServerInfo createServer(HetznerServerAgent agent) {
         try {
+            lock.writeLock().lock();
             final SshKeyDetail sshKey = getOrCreateSshKey(agent.getTemplate());
             final String imageId;
             //check if image is label expression
@@ -271,6 +274,8 @@ public class HetznerCloudResourceManager {
             return info;
         } catch (IOException e) {
             throw new IllegalStateException(e);
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
