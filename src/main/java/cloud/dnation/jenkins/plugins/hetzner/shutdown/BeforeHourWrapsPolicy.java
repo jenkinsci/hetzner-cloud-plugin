@@ -41,6 +41,11 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
         super(STRATEGY_SINGLETON);
     }
 
+    @SuppressWarnings("rawtypes")
+    @Override
+    public RetentionStrategy<AbstractCloudComputer> getRetentionStrategy() {
+        return STRATEGY_SINGLETON;
+    }
 
     @SuppressWarnings("rawtypes")
     private static class RetentionStrategyImpl extends RetentionStrategy<AbstractCloudComputer> {
