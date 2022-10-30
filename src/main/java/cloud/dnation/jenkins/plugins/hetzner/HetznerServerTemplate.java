@@ -19,7 +19,6 @@ import cloud.dnation.jenkins.plugins.hetzner.connect.AbstractConnectivity;
 import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractHetznerSshConnector;
 import cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractPrimaryIpStrategy;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.AbstractShutdownPolicy;
-import cloud.dnation.jenkins.plugins.hetzner.shutdown.IdlePeriodPolicy;
 import com.google.common.base.Strings;
 import hudson.Extension;
 import hudson.Util;
@@ -94,10 +93,6 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Getter
     private String jvmOpts;
 
-    @Deprecated
-    @Getter
-    private String keepAroundMinutes;
-
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
     private int numExecutors;
@@ -159,16 +154,6 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
             connectivity = HetznerConstants.DEFAULT_CONNECTIVITY;
         }
         return this;
-    }
-
-    @Deprecated
-    @DataBoundSetter
-    public void setKeepAroundMinutes(String keepAroundMinutes) {
-        if (!Strings.isNullOrEmpty(keepAroundMinutes)) {
-            log.info("{} : Migrating keepAroundMinutes to shutdown policy {}", name, keepAroundMinutes);
-            shutdownPolicy = new IdlePeriodPolicy(Integer.parseInt(keepAroundMinutes));
-        }
-        this.keepAroundMinutes = null;
     }
 
     /**
