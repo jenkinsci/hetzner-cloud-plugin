@@ -20,12 +20,14 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.RetentionStrategy;
 import lombok.Getter;
 
+import java.util.Objects;
+
 @SuppressWarnings("rawtypes")
 public abstract class AbstractShutdownPolicy extends AbstractDescribableImpl<AbstractShutdownPolicy> {
     @Getter
     protected final transient RetentionStrategy<AbstractCloudComputer> retentionStrategy;
 
     protected AbstractShutdownPolicy(RetentionStrategy<AbstractCloudComputer> strategy) {
-        this.retentionStrategy = strategy;
+        this.retentionStrategy = Objects.requireNonNull(strategy);
     }
 }
