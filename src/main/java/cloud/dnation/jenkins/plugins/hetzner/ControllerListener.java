@@ -21,9 +21,11 @@ import hudson.model.Computer;
 import hudson.model.TaskListener;
 import hudson.slaves.ComputerListener;
 import hudson.slaves.OfflineCause;
+import jenkins.model.Jenkins;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * {@link ComputerListener} that is responsible to perform cleanup tasks when Jenkins' controller node
@@ -43,11 +45,23 @@ public class ControllerListener extends ComputerListener {
 
     @Override
     public void onOffline(@NonNull Computer c, OfflineCause cause) {
-        //on controller shutdown, terminate any existing Hetzner agent
+        //on controller shutdown, terminate any existing Hetzner agent and computer
         if ("".equals(c.getName())) {
             Helper.getHetznerAgents().forEach(this::terminateAgent);
+            Arrays.stream(Jenkins.get().getComputers())
+                    .filter(HetznerServerComputer.class::isInstance)
+                    .forEach(this::deleteComputer);
         }
         super.onOffline(c, cause);
+    }
+
+    private void deleteComputer(Computer computer) {
+        try {
+            log.info("Deleting computer {}", computer);
+            computer.doDoDelete();
+        } catch (IOException e) {
+            log.error("Failed to delete computer", e);
+        }
     }
 
     private void terminateAgent(HetznerServerAgent agent) {
