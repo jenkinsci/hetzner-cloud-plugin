@@ -15,8 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.primaryip;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.CreateServerRequest;
-import cloud.dnation.jenkins.plugins.hetzner.client.HetznerApi;
+import cloud.dnation.hetznerclient.CreateServerRequest;
+import cloud.dnation.hetznerclient.HetznerApi;
 import hudson.model.AbstractDescribableImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

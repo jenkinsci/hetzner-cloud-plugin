@@ -15,7 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.launcher;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
+import cloud.dnation.hetznerclient.ServerDetail;
 import hudson.model.AbstractDescribableImpl;
 
 public abstract class AbstractConnectionMethod extends AbstractDescribableImpl<AbstractConnectionMethod> {

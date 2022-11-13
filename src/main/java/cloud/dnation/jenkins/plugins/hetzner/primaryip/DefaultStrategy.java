@@ -15,9 +15,9 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.primaryip;
 
+import cloud.dnation.hetznerclient.CreateServerRequest;
+import cloud.dnation.hetznerclient.HetznerApi;
 import cloud.dnation.jenkins.plugins.hetzner.Messages;
-import cloud.dnation.jenkins.plugins.hetzner.client.CreateServerRequest;
-import cloud.dnation.jenkins.plugins.hetzner.client.HetznerApi;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;

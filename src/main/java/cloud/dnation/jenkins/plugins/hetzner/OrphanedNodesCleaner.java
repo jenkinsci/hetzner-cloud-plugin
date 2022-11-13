@@ -15,7 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
+import cloud.dnation.hetznerclient.ServerDetail;
 import hudson.Extension;
 import hudson.model.PeriodicWork;
 import jenkins.model.Jenkins;

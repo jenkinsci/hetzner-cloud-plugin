@@ -15,8 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
-import cloud.dnation.jenkins.plugins.hetzner.client.SshKeyDetail;
+import cloud.dnation.hetznerclient.ServerDetail;
+import cloud.dnation.hetznerclient.SshKeyDetail;
 import lombok.Data;
 
 @Data
