@@ -15,11 +15,11 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.launcher;
 
+import cloud.dnation.hetznerclient.ServerDetail;
 import cloud.dnation.jenkins.plugins.hetzner.Helper;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerConstants;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerServerAgent;
 import cloud.dnation.jenkins.plugins.hetzner.HetznerServerComputer;
-import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.google.common.base.Preconditions;

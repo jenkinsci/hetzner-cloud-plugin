@@ -15,15 +15,15 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.ClientFactory;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetDatacentersResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetImageByIdResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetImagesBySelectorResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetLocationsResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetNetworkByIdResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetNetworksBySelectorResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.GetServerTypesResponse;
-import cloud.dnation.jenkins.plugins.hetzner.client.HetznerApi;
+import cloud.dnation.hetznerclient.ClientFactory;
+import cloud.dnation.hetznerclient.GetDatacentersResponse;
+import cloud.dnation.hetznerclient.GetImageByIdResponse;
+import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
+import cloud.dnation.hetznerclient.GetLocationsResponse;
+import cloud.dnation.hetznerclient.GetNetworkByIdResponse;
+import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
+import cloud.dnation.hetznerclient.GetServerTypesResponse;
+import cloud.dnation.hetznerclient.HetznerApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;

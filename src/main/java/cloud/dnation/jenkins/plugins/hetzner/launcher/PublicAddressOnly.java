@@ -15,8 +15,8 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.launcher;
 
+import cloud.dnation.hetznerclient.ServerDetail;
 import cloud.dnation.jenkins.plugins.hetzner.Messages;
-import cloud.dnation.jenkins.plugins.hetzner.client.ServerDetail;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;

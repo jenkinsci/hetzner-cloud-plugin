@@ -15,10 +15,10 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner.primaryip;
 
-import cloud.dnation.jenkins.plugins.hetzner.client.CreateServerRequest;
-import cloud.dnation.jenkins.plugins.hetzner.client.DatacenterDetail;
-import cloud.dnation.jenkins.plugins.hetzner.client.LocationDetail;
-import cloud.dnation.jenkins.plugins.hetzner.client.PrimaryIpDetail;
+import cloud.dnation.hetznerclient.CreateServerRequest;
+import cloud.dnation.hetznerclient.DatacenterDetail;
+import cloud.dnation.hetznerclient.LocationDetail;
+import cloud.dnation.hetznerclient.PrimaryIpDetail;
 import org.junit.Test;
 
 import static cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractByLabelSelector.isIpUsable;
