@@ -22,6 +22,8 @@ import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
 import cloud.dnation.hetznerclient.GetLocationsResponse;
 import cloud.dnation.hetznerclient.GetNetworkByIdResponse;
 import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
+import cloud.dnation.hetznerclient.GetPlacementGroupByIdResponse;
+import cloud.dnation.hetznerclient.GetPlacementGroupsResponse;
 import cloud.dnation.hetznerclient.GetServerTypesResponse;
 import cloud.dnation.hetznerclient.HetznerApi;
 import com.google.common.base.Preconditions;
@@ -132,6 +134,28 @@ public class ConfigurationValidator {
                         result.getNetwork().getName() + " " + result.getNetwork().getIpRange());
             } else {
                 return new ValidationResult(false, "Network expression unsupported : " + network);
+            }
+        }, credentialsId);
+    }
+
+    static ValidationResult verifyPlacementGroup(String placementGroup, String credentialsId) {
+        if (Strings.isNullOrEmpty(placementGroup)) {
+            return new ValidationResult(false, "Placement group expression is empty");
+        }
+        return validateWithClient(api -> {
+            if (Helper.isLabelExpression(placementGroup)) {
+                final GetPlacementGroupsResponse result = api.getPlacementGroups(placementGroup).execute().body();
+                Preconditions.checkArgument(result.getPlacementGroups().size() == 1,
+                        "Expected exactly one result, got %s", result.getPlacementGroups().size());
+                return new ValidationResult(true, "Found: " +
+                        result.getPlacementGroups().get(0).getName() + " " +
+                        result.getPlacementGroups().get(0).getId());
+            } else if (Helper.isPossiblyInteger(placementGroup)) {
+                final GetPlacementGroupByIdResponse result = api.getPlacementGroupById(Integer.parseInt(placementGroup)).execute().body();
+                return new ValidationResult(true, "Found: " +
+                        result.getPlacementGroup().getName() + " " + result.getPlacementGroup().getId());
+            } else {
+                return new ValidationResult(false, "Placement group expression unsupported : " + placementGroup);
             }
         }, credentialsId);
     }

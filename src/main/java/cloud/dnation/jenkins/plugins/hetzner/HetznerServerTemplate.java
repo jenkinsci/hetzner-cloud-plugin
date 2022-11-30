@@ -51,6 +51,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doChe
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyImage;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyLocation;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyNetwork;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyPlacementGroup;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyServerType;
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REMOTE_FS;
@@ -88,6 +89,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Setter(onMethod = @__({@DataBoundSetter}))
     @Getter
     private String remoteFs;
+
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    @Getter
+    private String placementGroup;
 
     @Setter(onMethod = @__({@DataBoundSetter}))
     @Getter
@@ -153,6 +158,9 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         if (connectivity == null ) {
             connectivity = HetznerConstants.DEFAULT_CONNECTIVITY;
         }
+        if (placementGroup == null) {
+            placementGroup = "";
+        }
         return this;
     }
 
@@ -203,6 +211,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         public FormValidation doVerifyNetwork(@QueryParameter String network,
                                               @QueryParameter String credentialsId) {
             return verifyNetwork(network, credentialsId).toFormValidation();
+        }
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
+        public FormValidation doVerifyPlacementGroup(@QueryParameter String placementGroup,
+                                              @QueryParameter String credentialsId) {
+            return verifyPlacementGroup(placementGroup, credentialsId).toFormValidation();
         }
 
         @Restricted(NoExternalUse.class)
