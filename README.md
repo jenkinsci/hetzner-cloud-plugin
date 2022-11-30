@@ -186,6 +186,7 @@ jenkins:
             image: name=jenkins
             mode: NORMAL
             numExecutors: 1
+            placementGroup: "key1=value1&key2=value2"
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
@@ -199,6 +200,7 @@ jenkins:
             network: subsystem=cd
             labelStr: java
             numExecutors: 3
+            placementGroup: "1000656"
             connectivity: "public-only"
             connector:
               root:

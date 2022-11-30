@@ -23,6 +23,7 @@ import cloud.dnation.hetznerclient.CreateSshKeyRequest;
 import cloud.dnation.hetznerclient.CreateSshKeyResponse;
 import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
 import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
+import cloud.dnation.hetznerclient.GetPlacementGroupsResponse;
 import cloud.dnation.hetznerclient.GetServerByIdResponse;
 import cloud.dnation.hetznerclient.GetServersBySelectorResponse;
 import cloud.dnation.hetznerclient.GetSshKeysBySelectorResponse;
@@ -134,6 +135,21 @@ public class HetznerCloudResourceManager {
     private int getNetworkIdForLabelExpression(String labelExpression) throws IOException {
         return searchResourceByLabelExpression(labelExpression, proxy()::getNetworkBySelector,
                 GetNetworksBySelectorResponse::getNetworks);
+    }
+
+    /**
+     * Attempt to obtain placement group based on label expression.
+     * It's expected that provided label expression resolves to single placement group.
+     *
+     * @param labelExpression label expression used to filter placement group
+     * @return placement group ID
+     * @throws IOException              if fails to make API call
+     * @throws IllegalStateException    if there was invalid response from API server
+     * @throws IllegalArgumentException if label expression didn't yield single placement group
+     */
+    private int getPlacementGroupForLabelExpression(String labelExpression) throws IOException {
+        return searchResourceByLabelExpression(labelExpression, proxy()::getPlacementGroups,
+                GetPlacementGroupsResponse::getPlacementGroups);
     }
 
     private <R extends AbstractSearchResponse, I extends IdentifiableResource> int searchResourceByLabelExpression(
@@ -252,6 +268,14 @@ public class HetznerCloudResourceManager {
                         createServerRequest.setPublicNet(pn);
                     }
                     createServerRequest.setNetworks(Lists.newArrayList(networkId));
+                }
+            }
+            final String placementGroup = agent.getTemplate().getPlacementGroup();
+            if (!Strings.isNullOrEmpty(placementGroup)) {
+                if(Helper.isPossiblyInteger(placementGroup)) {
+                    createServerRequest.setPlacementGroup(Integer.parseInt(placementGroup));
+                } else {
+                    createServerRequest.setPlacementGroup(getPlacementGroupForLabelExpression(placementGroup));
                 }
             }
             createServerRequest.setServerType(agent.getTemplate().getServerType());
