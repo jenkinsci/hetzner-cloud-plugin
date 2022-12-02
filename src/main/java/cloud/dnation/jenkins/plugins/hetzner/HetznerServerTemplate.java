@@ -96,6 +96,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
 
     @Setter(onMethod = @__({@DataBoundSetter}))
     @Getter
+    private String userData;
+
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    @Getter
     private String jvmOpts;
 
     @Getter
@@ -160,6 +164,9 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         }
         if (placementGroup == null) {
             placementGroup = "";
+        }
+        if (userData == null) {
+            userData = "";
         }
         return this;
     }
