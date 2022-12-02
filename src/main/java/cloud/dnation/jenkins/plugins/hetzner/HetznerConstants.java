@@ -30,21 +30,6 @@ import java.util.Set;
 @UtilityClass
 public class HetznerConstants {
     /**
-     * System property name prefix for all properties that this plugin understands.
-     */
-    public static final String PROP_PREFIX = HetznerConstants.class.getPackage().getName();
-
-    /**
-     * Name of system property used to override Hetzner API endpoint, used by tests only.
-     */
-    public static final String PROP_API_ENDPOINT = PROP_PREFIX + ".api-endpoint";
-
-    /**
-     * Hetzner public cloud API endpoint.
-     */
-    public static final String DEFAULT_ENDPOINT = "https://api.hetzner.cloud/v1/";
-
-    /**
      * Namespace for labels added to all objects managed by this plugin.
      */
     public static final String LABEL_NS = "jenkins.io/";
