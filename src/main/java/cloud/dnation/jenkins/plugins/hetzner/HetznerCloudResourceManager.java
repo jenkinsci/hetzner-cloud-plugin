@@ -278,6 +278,9 @@ public class HetznerCloudResourceManager {
                     createServerRequest.setPlacementGroup(getPlacementGroupForLabelExpression(placementGroup));
                 }
             }
+            if (!Strings.isNullOrEmpty(agent.getTemplate().getUserData())) {
+                createServerRequest.setUserData(agent.getTemplate().getUserData());
+            }
             createServerRequest.setServerType(agent.getTemplate().getServerType());
             createServerRequest.setImage(imageId);
             createServerRequest.setName(agent.getNodeName());
