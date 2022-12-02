@@ -44,7 +44,7 @@ public class OrphanedNodesCleaner extends PeriodicWork {
     }
 
     @Override
-    protected void doRun() throws Exception {
+    protected void doRun() {
         doCleanup();
     }
 
