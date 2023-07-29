@@ -106,8 +106,8 @@ public class ConfigurationValidator {
                         "Expected exactly one result, got %s", result.getImages().size());
                 return new ValidationResult(true, "Found: " +
                         result.getImages().get(0).getDescription());
-            } else if (Helper.isPossiblyInteger(image)) {
-                final GetImageByIdResponse result = api.getImageById(Integer.parseInt(image)).execute().body();
+            } else if (Helper.isPossiblyLong(image)) {
+                final GetImageByIdResponse result = api.getImageById(Long.parseLong(image)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getImage().getDescription());
             } else {
@@ -128,7 +128,7 @@ public class ConfigurationValidator {
                 return new ValidationResult(true, "Found: " +
                         result.getNetworks().get(0).getName() + " " +
                         result.getNetworks().get(0).getIpRange());
-            } else if (Helper.isPossiblyInteger(network)) {
+            } else if (Helper.isPossiblyLong(network)) {
                 final GetNetworkByIdResponse result = api.getNetworkById(Integer.parseInt(network)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getNetwork().getName() + " " + result.getNetwork().getIpRange());
@@ -150,7 +150,7 @@ public class ConfigurationValidator {
                 return new ValidationResult(true, "Found: " +
                         result.getPlacementGroups().get(0).getName() + " " +
                         result.getPlacementGroups().get(0).getId());
-            } else if (Helper.isPossiblyInteger(placementGroup)) {
+            } else if (Helper.isPossiblyLong(placementGroup)) {
                 final GetPlacementGroupByIdResponse result = api.getPlacementGroupById(Integer.parseInt(placementGroup)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getPlacementGroup().getName() + " " + result.getPlacementGroup().getId());

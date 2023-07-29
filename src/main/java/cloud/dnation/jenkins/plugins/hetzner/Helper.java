@@ -20,7 +20,6 @@ import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.primitives.Ints;
 import com.trilead.ssh2.crypto.PEMDecoder;
 import hudson.security.ACL;
 import jenkins.model.Jenkins;
@@ -92,14 +91,18 @@ public class Helper {
     }
 
     /**
-     * Check if given string could be parsed as positive integer.
+     * Check if given string could be parsed as positive long.
      *
      * @param str string to check
-     * @return <code>true</code> if given string could be parsed as positive integer, <code>false</code> otherwise
+     * @return <code>true</code> if given string could be parsed as positive long, <code>false</code> otherwise
      */
-    public static boolean isPossiblyInteger(String str) {
-        final Integer value = Ints.tryParse(str);
-        return value != null && value > 0;
+    public static boolean isPossiblyLong(String str) {
+        try {
+            final long value = Long.parseLong(str);
+            return value > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     public static <T, E> List<E> getPayload(@Nonnull Response<T> response, @Nonnull Function<T, List<E>> mapper) {
