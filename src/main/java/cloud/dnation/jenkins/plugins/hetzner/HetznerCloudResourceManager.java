@@ -117,7 +117,7 @@ public class HetznerCloudResourceManager {
      * @throws IllegalStateException    if there was invalid response from API server
      * @throws IllegalArgumentException if label expression didn't yield single image
      */
-    private int getImageIdForLabelExpression(String labelExpression) throws IOException {
+    private long getImageIdForLabelExpression(String labelExpression) throws IOException {
         return searchResourceByLabelExpression(labelExpression, proxy()::getImagesBySelector,
                 GetImagesBySelectorResponse::getImages);
     }
@@ -132,7 +132,7 @@ public class HetznerCloudResourceManager {
      * @throws IllegalStateException    if there was invalid response from API server
      * @throws IllegalArgumentException if label expression didn't yield single network
      */
-    private int getNetworkIdForLabelExpression(String labelExpression) throws IOException {
+    private long getNetworkIdForLabelExpression(String labelExpression) throws IOException {
         return searchResourceByLabelExpression(labelExpression, proxy()::getNetworkBySelector,
                 GetNetworksBySelectorResponse::getNetworks);
     }
@@ -147,12 +147,12 @@ public class HetznerCloudResourceManager {
      * @throws IllegalStateException    if there was invalid response from API server
      * @throws IllegalArgumentException if label expression didn't yield single placement group
      */
-    private int getPlacementGroupForLabelExpression(String labelExpression) throws IOException {
+    private long getPlacementGroupForLabelExpression(String labelExpression) throws IOException {
         return searchResourceByLabelExpression(labelExpression, proxy()::getPlacementGroups,
                 GetPlacementGroupsResponse::getPlacementGroups);
     }
 
-    private <R extends AbstractSearchResponse, I extends IdentifiableResource> int searchResourceByLabelExpression(
+    private <R extends AbstractSearchResponse, I extends IdentifiableResource> long searchResourceByLabelExpression(
             String labelExpression,
             Function<String, Call<R>> searchFunction,
             Function<R, List<I>> getItemsFunction) throws IOException {
@@ -172,7 +172,7 @@ public class HetznerCloudResourceManager {
      * @param server server instance to remove from cloud
      */
     public void destroyServer(ServerDetail server) {
-        final int serverId = server.getId();
+        final long serverId = server.getId();
         final HetznerApi client = proxy();
         try {
             assertValidResponse(client.powerOffServer(serverId).execute());
@@ -204,11 +204,10 @@ public class HetznerCloudResourceManager {
         }
         final String publicKey = getSSHPublicKeyFromPrivate(privateKey.getPrivateKey(),
                 Secret.toString(privateKey.getPassphrase()));
-        final Response<CreateSshKeyResponse> createResponse = proxy().createSshKey(CreateSshKeyRequest.builder()
+        final Response<CreateSshKeyResponse> createResponse = proxy().createSshKey(new CreateSshKeyRequest()
                         .labels(createLabelsForSshKey(credentialsId))
                         .name(template.getConnector().getSshCredentialsId())
-                        .publicKey(publicKey)
-                        .build())
+                        .publicKey(publicKey))
                 .execute();
         return assertValidResponse(createResponse, CreateSshKeyResponse::getSshKey);
     }
@@ -255,9 +254,9 @@ public class HetznerCloudResourceManager {
             final ConnectivityType ct = agent.getTemplate().getConnectivity().getType();
             if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PRIVATE) {
                 if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
-                    final int networkId;
-                    if (Helper.isPossiblyInteger(agent.getTemplate().getNetwork())) {
-                        networkId = Integer.parseInt(agent.getTemplate().getNetwork());
+                    final long networkId;
+                    if (Helper.isPossiblyLong(agent.getTemplate().getNetwork())) {
+                        networkId = Long.parseLong(agent.getTemplate().getNetwork());
                     } else {
                         networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
                     }
@@ -272,8 +271,8 @@ public class HetznerCloudResourceManager {
             }
             final String placementGroup = agent.getTemplate().getPlacementGroup();
             if (!Strings.isNullOrEmpty(placementGroup)) {
-                if(Helper.isPossiblyInteger(placementGroup)) {
-                    createServerRequest.setPlacementGroup(Integer.parseInt(placementGroup));
+                if(Helper.isPossiblyLong(placementGroup)) {
+                    createServerRequest.setPlacementGroup(Long.parseLong(placementGroup));
                 } else {
                     createServerRequest.setPlacementGroup(getPlacementGroupForLabelExpression(placementGroup));
                 }

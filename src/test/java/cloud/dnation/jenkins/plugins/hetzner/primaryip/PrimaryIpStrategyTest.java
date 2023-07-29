@@ -63,7 +63,7 @@ public class PrimaryIpStrategyTest {
         assertFalse(isIpUsable(ip, server));
 
         //Already allocated
-        ip.setAssigneeId(0);
+        ip.setAssigneeId(0L);
         assertFalse(isIpUsable(ip, server));
     }
 }

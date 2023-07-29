@@ -58,4 +58,11 @@ public class HelperTest {
         assertFalse(Helper.canShutdownServer(str, time("2022-08-08T11:03:02")));
         assertTrue(Helper.canShutdownServer(str, time("2022-08-08T11:59:02")));
     }
+
+    @Test
+    public void testIsPossiblyLong() {
+        assertTrue(Helper.isPossiblyLong("1"));
+        assertFalse(Helper.isPossiblyLong("0"));
+        assertFalse(Helper.isPossiblyLong("not-a-number"));
+    }
 }

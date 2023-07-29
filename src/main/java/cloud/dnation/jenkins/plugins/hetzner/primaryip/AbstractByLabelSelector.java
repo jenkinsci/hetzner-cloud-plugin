@@ -38,7 +38,7 @@ public abstract class AbstractByLabelSelector extends AbstractPrimaryIpStrategy 
 
     @Override
     public void applyInternal(HetznerApi api, CreateServerRequest server) throws IOException {
-        final PrimaryIpDetail pip = api.getAllPrimaryIps(selector).execute().body().getIps().stream()
+        final PrimaryIpDetail pip = api.getAllPrimaryIps(selector).execute().body().getPrimaryIps().stream()
                 .filter(ip -> isIpUsable(ip, server)).findFirst().get();
         final PublicNetRequest net = new PublicNetRequest();
         net.setIpv4(pip.getId());
