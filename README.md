@@ -269,3 +269,16 @@ It's possible to create images in Hetzner Cloud using Packer.
   **Cause** : SSH key with same signature already exists in project's security settings.
 
   **Remedy** : Remove offending key from project security settings, it will be automatically created using correct labels.
+
+### How to debug API calls
+
+To enable debug logging in for API calls, [configure log recorder](https://www.jenkins.io/doc/book/system-administration/viewing-logs/#logs-in-jenkins) for logger `cloud.dnation.hetznerclient`.
+
+- Go to `Manage Jenkins` => `Log Recorders`
+- Click on `Add new log recorder`
+- choose any name that make sense for you, like `hetzner-cloud`
+- Add logger with name `cloud.dnation.hetznerclient`
+- save
+- now any headers, request and response body will be logged
+
+![add-log-recorder](docs/add-log-recorder.png)
