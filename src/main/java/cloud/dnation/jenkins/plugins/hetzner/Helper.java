@@ -42,6 +42,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -103,6 +104,10 @@ public class Helper {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    public static List<Long> idList(String str) {
+        return Arrays.stream(str.split(",")).map(Long::parseLong).collect(Collectors.toList());
     }
 
     public static <T, E> List<E> getPayload(@Nonnull Response<T> response, @Nonnull Function<T, List<E>> mapper) {

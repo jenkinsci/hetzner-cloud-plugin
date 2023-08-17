@@ -53,6 +53,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verif
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyNetwork;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyPlacementGroup;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyServerType;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyVolumes;
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REMOTE_FS;
 
@@ -130,6 +131,14 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Setter(onMethod = @__({@DataBoundSetter}))
     private AbstractConnectivity connectivity;
 
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private boolean automountVolumes;
+
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private String volumeIds;
+
     @DataBoundConstructor
     public HetznerServerTemplate(String name, String labelStr, String image,
                                  String location, String serverType) {
@@ -167,6 +176,9 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         }
         if (userData == null) {
             userData = "";
+        }
+        if (volumeIds == null) {
+            volumeIds = "";
         }
         return this;
     }
@@ -232,6 +244,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         public FormValidation doVerifyServerType(@QueryParameter String serverType,
                                                  @QueryParameter String credentialsId) {
             return verifyServerType(serverType, credentialsId).toFormValidation();
+        }
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
+        public FormValidation doVerifyVolumes(@QueryParameter String volumeIds,
+                                                 @QueryParameter String credentialsId) {
+            return verifyVolumes(volumeIds, credentialsId).toFormValidation();
         }
 
         @Restricted(NoExternalUse.class)

@@ -66,6 +66,15 @@
         <f:dropdownDescriptorSelector field="primaryIp" title="Primary IP" />
 
         <f:dropdownDescriptorSelector field="connectivity" title="${%Connectivity}" />
+
+        <f:entry title="Automount volumes" field="automountVolumes" default="false">
+            <f:checkbox />
+        </f:entry>
+        <f:entry title="${%Volume IDs to attach}" field="volumeIds">
+            <f:textbox />
+            <f:validateButton title="Verify volumes" progress="${%Testing...}" method="verifyVolumes"
+                              with="volumeIds,credentialsId"/>
+        </f:entry>
     </f:advanced>
     <f:advanced title="${%Other}" align="left">
         <f:entry title="${%User data}" field="userData">
