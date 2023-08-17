@@ -25,6 +25,7 @@ import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
 import cloud.dnation.hetznerclient.GetPlacementGroupByIdResponse;
 import cloud.dnation.hetznerclient.GetPlacementGroupsResponse;
 import cloud.dnation.hetznerclient.GetServerTypesResponse;
+import cloud.dnation.hetznerclient.GetVolumeByIdResponse;
 import cloud.dnation.hetznerclient.HetznerApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -33,6 +34,8 @@ import com.google.common.primitives.Ints;
 import hudson.util.FormValidation;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Arrays;
 
 @Slf4j
 public class ConfigurationValidator {
@@ -205,6 +208,27 @@ public class ConfigurationValidator {
         }, credentialsId);
     }
 
+    static ValidationResult verifyVolume(String volume, String credentialsId) {
+        return validateWithClient(api -> {
+            if (!Helper.isPossiblyLong(volume)) {
+                return new ValidationResult(false, String.format("not a valid volume ID: %s", volume));
+            }
+            final GetVolumeByIdResponse result = api.getVolumeById(Long.parseLong(volume)).execute().body();
+            if (result == null) {
+                return new ValidationResult(false, String.format("Volume %s not found", volume));
+            }else {
+                return new ValidationResult(true, String.format("%s: %s",
+                        result.getVolume().getName(), result.getVolume().getFormat()));
+            }
+        }, credentialsId);
+    }
+
+    static ValidationResult verifyVolumes(String volumeIds, String credentialId) {
+        log.info("volumeIds: {}", volumeIds);
+        return Arrays.stream(volumeIds.split(",")).map(volId -> verifyVolume(volId, credentialId))
+                .filter(res -> !res.isSuccess()).findFirst().orElse(ValidationResult.OK);
+    }
+
     public static FormValidation doCheckPositiveInt(String value, String name) {
         if (Ints.tryParse(value) == null) {
             return FormValidation.error(name + " must be positive integer : " + value);
@@ -226,7 +250,7 @@ public class ConfigurationValidator {
 
     @Data
     static class ValidationResult {
-        static final ValidationResult OK = new ValidationResult(true, null);
+        static final ValidationResult OK = new ValidationResult(true, "OK");
         private final boolean success;
         private final String message;
 

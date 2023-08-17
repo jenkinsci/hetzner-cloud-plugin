@@ -142,6 +142,11 @@ These additional attributes can be specified, but are not required:
   - `Only public networking will be allocated` - public IP address will be allocated to the server
   - `Configure both private and public networking`
 
+- `Automount volumes` - Auto-mount volumes after attach.
+
+- `Volume IDs to attach` - Volume IDs which should be attached to the Server at the creation time. Volumes must be in the same Location.
+  Note that volumes can be mounted into **single server** at the time.
+
 ### Scripted configuration using Groovy
 
 ```groovy
@@ -197,11 +202,15 @@ jenkins:
             remoteFs: /var/lib/jenkins
             location: fsn1
             image: name=jenkins
+            mode: EXCLUSIVE
             network: subsystem=cd
             labelStr: java
             numExecutors: 3
             placementGroup: "1000656"
             connectivity: "public-only"
+            automountVolumes: true
+            volumeIds:
+              - 12345678
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'

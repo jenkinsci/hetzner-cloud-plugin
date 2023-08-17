@@ -251,6 +251,12 @@ public class HetznerCloudResourceManager {
             }
 
             final CreateServerRequest createServerRequest = new CreateServerRequest();
+            if (agent.getTemplate().isAutomountVolumes()) {
+                createServerRequest.setAutomount(true);
+            }
+            if (!Strings.isNullOrEmpty(agent.getTemplate().getVolumeIds())) {
+                createServerRequest.setVolumes(Helper.idList(agent.getTemplate().getVolumeIds()));
+            }
             final ConnectivityType ct = agent.getTemplate().getConnectivity().getType();
             if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PRIVATE) {
                 if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
