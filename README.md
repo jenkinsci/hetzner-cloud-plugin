@@ -272,7 +272,7 @@ It's possible to create images in Hetzner Cloud using Packer.
 
 ### How to debug API calls
 
-To enable debug logging in for API calls, [configure log recorder](https://www.jenkins.io/doc/book/system-administration/viewing-logs/#logs-in-jenkins) for logger `cloud.dnation.hetznerclient`.
+To enable debug logging for API calls, [configure log recorder](https://www.jenkins.io/doc/book/system-administration/viewing-logs/#logs-in-jenkins) for logger `cloud.dnation.hetznerclient`.
 
 - Go to `Manage Jenkins` => `Log Recorders`
 - Click on `Add new log recorder`
