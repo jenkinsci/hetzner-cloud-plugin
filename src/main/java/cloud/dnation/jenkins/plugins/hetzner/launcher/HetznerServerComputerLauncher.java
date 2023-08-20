@@ -76,9 +76,9 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         final String launchScriptPath = remoteFs + "/" + AGENT_SCRIPT;
         final SCPClient scp = connection.createSCPClient();
         logger.info("Copying agent JAR - " + agentBlob.length + " bytes into " + remoteAgentPath);
-        scp.put(agentBlob, AGENT_JAR, remoteFs, "0444");
+        scp.put(agentBlob, AGENT_JAR, remoteFs, "0644");
         logger.info("Copying agent script - " + launchScriptContent.length + " bytes into " + launchScriptPath);
-        scp.put(launchScriptContent, AGENT_SCRIPT, remoteFs, "0555");
+        scp.put(launchScriptContent, AGENT_SCRIPT, remoteFs, "0755");
     }
 
     @SuppressFBWarnings(value = {"NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE", "NP_NULL_PARAM_DEREF"},
