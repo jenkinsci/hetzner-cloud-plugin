@@ -51,12 +51,14 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.SimpleFormatter;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.SHUTDOWN_TIME_BUFFER;
 
 @UtilityClass
 public class Helper {
+    private static final Pattern LABEL_VALUE_RE = Pattern.compile("^(?![0-9]+$)(?!-)[a-zA-Z0-9-_.]{0,63}(?<!-)$");
     private static final String SSH_RSA = "ssh-rsa";
 
     /**
@@ -201,5 +203,12 @@ public class Helper {
                 .filter(HetznerServerAgent.class::isInstance)
                 .map(HetznerServerAgent.class::cast)
                 .collect(Collectors.toList());
+    }
+
+    public static boolean isValidLabelValue(String value) {
+        if (Strings.isNullOrEmpty(value)) {
+            return false;
+        }
+        return LABEL_VALUE_RE.matcher(value).matches();
     }
 }
