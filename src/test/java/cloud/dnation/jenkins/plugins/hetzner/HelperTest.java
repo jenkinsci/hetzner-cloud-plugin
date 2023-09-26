@@ -65,4 +65,13 @@ public class HelperTest {
         assertFalse(Helper.isPossiblyLong("0"));
         assertFalse(Helper.isPossiblyLong("not-a-number"));
     }
+
+    @Test
+    public void testIsValidLabelValue() {
+        assertFalse(Helper.isValidLabelValue(""));
+        assertFalse(Helper.isValidLabelValue(null));
+        assertTrue(Helper.isValidLabelValue("cloud-01"));
+        assertTrue(Helper.isValidLabelValue("cloud_01"));
+        assertFalse(Helper.isValidLabelValue("cloud 01"));
+    }
 }

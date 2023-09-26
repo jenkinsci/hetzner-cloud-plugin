@@ -209,6 +209,15 @@ public class HetznerCloud extends AbstractCloudImpl {
 
         @Restricted(NoExternalUse.class)
         @RequirePOST
+        public FormValidation doCheckCloudName(@QueryParameter String name) {
+            if (Helper.isValidLabelValue(name)) {
+                return FormValidation.ok();
+            }
+            return FormValidation.error("Cloud name is not a valid label value: %s", name);
+        }
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath Item owner) {
             final StandardListBoxModel result = new StandardListBoxModel();
             if (owner == null) {
