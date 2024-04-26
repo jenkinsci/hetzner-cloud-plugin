@@ -64,6 +64,10 @@
                     <th>Public IPv4 address</th>
                     <td>${instance.publicNet.ipv4.ip}</td>
                 </tr>
+                <tr>
+                    <th>Public IPv6 address</th>
+                    <td>${instance.publicNet.ipv6.ip}</td>
+                </tr>
                 <j:choose>
                     <j:when test="${instance.privateNet != null and instance.privateNet.size() == 1}">
                         <tr>

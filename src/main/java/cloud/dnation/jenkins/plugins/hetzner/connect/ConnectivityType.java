@@ -18,5 +18,7 @@ package cloud.dnation.jenkins.plugins.hetzner.connect;
 public enum ConnectivityType {
     PRIVATE,
     PUBLIC,
-    BOTH
+    PUBLIC_V6,
+    BOTH,
+    BOTH_V6
 }
