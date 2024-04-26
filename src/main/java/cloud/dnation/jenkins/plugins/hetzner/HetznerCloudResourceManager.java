@@ -44,6 +44,7 @@ import com.google.common.collect.Lists;
 import hudson.util.Secret;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import retrofit2.Call;
 import retrofit2.Response;
@@ -56,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -231,6 +233,55 @@ public class HetznerCloudResourceManager {
         }
     }
 
+    @SneakyThrows
+    private void configurePrivateNetwork(CreateServerRequest req, String network) {
+        if (!Strings.isNullOrEmpty(network)) {
+            final long networkId;
+            if (Helper.isPossiblyLong(network)) {
+                networkId = Long.parseLong(network);
+            } else {
+                networkId = getNetworkIdForLabelExpression(network);
+            }
+            req.setNetworks(Lists.newArrayList(networkId));
+        }
+    }
+
+    @VisibleForTesting
+    static void customizeNetworking(ConnectivityType ct, CreateServerRequest req, String network,
+                             BiConsumer<CreateServerRequest, String> privateNetConfig) throws IOException {
+        req.setPublicNet(new PublicNetRequest());
+        req.getPublicNet().setEnableIpv4(false);
+        req.getPublicNet().setEnableIpv6(false);
+        switch (ct) {
+            case PRIVATE:
+                privateNetConfig.accept(req, network);
+                break;
+
+            case BOTH:
+                req.getPublicNet().setEnableIpv4(true);
+                req.getPublicNet().setEnableIpv6(true);
+                privateNetConfig.accept(req, network);
+                break;
+
+            case BOTH_V6:
+                req.getPublicNet().setEnableIpv6(true);
+                privateNetConfig.accept(req, network);
+                break;
+
+            case PUBLIC:
+                req.getPublicNet().setEnableIpv4(true);
+                req.getPublicNet().setEnableIpv6(true);
+                break;
+
+            case PUBLIC_V6:
+                req.getPublicNet().setEnableIpv6(true);
+                break;
+
+            default:
+                throw new IllegalArgumentException("Unknown connectivity type: " + ct);
+        }
+    }
+
     /**
      * Create new server instance.
      *
@@ -258,23 +309,8 @@ public class HetznerCloudResourceManager {
                 createServerRequest.setVolumes(Helper.idList(agent.getTemplate().getVolumeIds()));
             }
             final ConnectivityType ct = agent.getTemplate().getConnectivity().getType();
-            if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PRIVATE) {
-                if (!Strings.isNullOrEmpty(agent.getTemplate().getNetwork())) {
-                    final long networkId;
-                    if (Helper.isPossiblyLong(agent.getTemplate().getNetwork())) {
-                        networkId = Long.parseLong(agent.getTemplate().getNetwork());
-                    } else {
-                        networkId = getNetworkIdForLabelExpression(agent.getTemplate().getNetwork());
-                    }
-                    if (ct == ConnectivityType.PRIVATE) {
-                        final PublicNetRequest pn = new PublicNetRequest();
-                        pn.setEnableIpv4(false);
-                        pn.setEnableIpv6(false);
-                        createServerRequest.setPublicNet(pn);
-                    }
-                    createServerRequest.setNetworks(Lists.newArrayList(networkId));
-                }
-            }
+            customizeNetworking(ct, createServerRequest, agent.getTemplate().getNetwork(),
+                    this::configurePrivateNetwork);
             final String placementGroup = agent.getTemplate().getPlacementGroup();
             if (!Strings.isNullOrEmpty(placementGroup)) {
                 if(Helper.isPossiblyLong(placementGroup)) {
@@ -296,9 +332,10 @@ public class HetznerCloudResourceManager {
                 createServerRequest.setLocation(agent.getTemplate().getLocation());
             }
             createServerRequest.setLabels(createLabelsForServer(agent.getTemplate().getCloud().name));
-            if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC) {
+            if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC_V6 || ct == ConnectivityType.PUBLIC) {
                 Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
             }
+            log.debug("Calling API to create server resource : {}", createServerRequest);
             final Response<CreateServerResponse> createServerResponse = proxy().createServer(createServerRequest)
                     .execute();
             final HetznerServerInfo info = new HetznerServerInfo(sshKey);

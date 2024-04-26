@@ -92,6 +92,8 @@ Following attributes are **required** for each server template:
   In both cases, selection of IP address can be specified as one of
     - `Connect using private IPv4 address if available, otherwise using public IPv4 address`
     - `Connect using public IPv4 address only`
+    - `Connect using public IPv6 address only`
+
 - `Labels` - Labels that identifies jobs that could run on node created from this template.
   Multiple values can be specified when separated by space.
   When no labels are specified and usage mode is set to <strong>Use this node as much as possible</strong>,
@@ -138,9 +140,13 @@ These additional attributes can be specified, but are not required:
     If no address is available or any error occurs, problem is logged, but provisioning of agent will continue without Primary IP being allocated.
 
 - `Connectivity` - defines how network connectivity will be configured on newly created server
-  - `Only private networking will be used` - network ID or labels expression must also be provided
-  - `Only public networking will be allocated` - public IP address will be allocated to the server
-  - `Configure both private and public networking`
+  - `Only private networking will be used` - network ID or labels expression must be provided
+  - `Only public networking will be allocated` - public IPv4/IPv6 addresses will be allocated to the server
+  - `Only public IPv6 networking will be allocated` - public IPv6 address will be allocated to the server
+  - `Configure both private and public networking` - public IPv4/IPv6 addresses will be allocated. Network ID or labels expression must be provided.
+  - `Configure both private and public IPv6 networking` - public IPv6 address will be allocated. Network ID or labels expression must be provided.
+
+  Make sure this field is aligned with `Connection method`.
 
 - `Automount volumes` - Auto-mount volumes after attach.
 
