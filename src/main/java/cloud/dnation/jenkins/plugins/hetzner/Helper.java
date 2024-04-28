@@ -26,17 +26,20 @@ import jenkins.model.Jenkins;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.UtilityClass;
+import net.i2p.crypto.eddsa.EdDSAPublicKey;
+import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
+import org.bouncycastle.crypto.params.RSAKeyParameters;
+import org.bouncycastle.crypto.util.OpenSSHPublicKeyUtil;
 import org.slf4j.Logger;
 import retrofit2.Response;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
+import java.security.PublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -60,6 +63,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.SHUTDOWN_TI
 public class Helper {
     private static final Pattern LABEL_VALUE_RE = Pattern.compile("^(?![0-9]+$)(?!-)[a-zA-Z0-9-_.]{0,63}(?<!-)$");
     private static final String SSH_RSA = "ssh-rsa";
+    private static final String SSH_ED25519 = "ssh-ed25519";
 
     /**
      * Extract public key from SSH private key.
@@ -71,16 +75,21 @@ public class Helper {
      */
     public static String getSSHPublicKeyFromPrivate(String privateKey, @Nullable String password) throws IOException {
         final KeyPair pair = PEMDecoder.decodeKeyPair(privateKey.toCharArray(), password);
-        final RSAPublicKey pubKey = (RSAPublicKey) pair.getPublic();
-        final ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        final DataOutputStream dos = new DataOutputStream(bos);
-        dos.writeInt(SSH_RSA.getBytes(StandardCharsets.ISO_8859_1).length);
-        dos.write(SSH_RSA.getBytes(StandardCharsets.ISO_8859_1));
-        dos.writeInt(pubKey.getPublicExponent().toByteArray().length);
-        dos.write(pubKey.getPublicExponent().toByteArray());
-        dos.writeInt(pubKey.getModulus().toByteArray().length);
-        dos.write(pubKey.getModulus().toByteArray());
-        return SSH_RSA + " " + Base64.getEncoder().encodeToString(bos.toByteArray());
+        final PublicKey pk = pair.getPublic();
+        final String prefix;
+        final AsymmetricKeyParameter keyParam;
+        if (pk instanceof EdDSAPublicKey) {
+            final EdDSAPublicKey edpk = (EdDSAPublicKey) pk;
+            prefix = SSH_ED25519;
+            keyParam = new Ed25519PublicKeyParameters(edpk.getAbyte(), 0);
+        } else if (pk instanceof RSAPublicKey) {
+            final RSAPublicKey rsapk = (RSAPublicKey)pk;
+            prefix = SSH_RSA;
+            keyParam = new RSAKeyParameters(false, rsapk.getModulus(), rsapk.getPublicExponent());
+        } else {
+            throw new IllegalArgumentException("PublicKey type not recognized: " + pk.getClass());
+        }
+        return prefix + " " + Base64.getEncoder().encodeToString(OpenSSHPublicKeyUtil.encodePublicKey(keyParam));
     }
 
     /**
