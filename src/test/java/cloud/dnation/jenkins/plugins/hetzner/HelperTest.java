@@ -27,9 +27,16 @@ import static org.junit.Assert.assertTrue;
 
 public class HelperTest {
     @Test
-    public void testExtractPublicKey() throws IOException {
+    public void testExtractPublicKeyRSA() throws IOException {
         final String pubKeyStr = TestHelper.resourceAsString("id_rsa.pub");
         final String privKeyStr = TestHelper.resourceAsString("id_rsa");
+        assertEquals(pubKeyStr, Helper.getSSHPublicKeyFromPrivate(privKeyStr, null));
+    }
+
+    @Test
+    public void testExtractPublicKeyED25519() throws IOException {
+        final String pubKeyStr = TestHelper.resourceAsString("id_ed25519.pub");
+        final String privKeyStr = TestHelper.resourceAsString("id_ed25519");
         assertEquals(pubKeyStr, Helper.getSSHPublicKeyFromPrivate(privKeyStr, null));
     }
 
