@@ -91,6 +91,7 @@ Following attributes are **required** for each server template:
 
   In both cases, selection of IP address can be specified as one of
     - `Connect using private IPv4 address if available, otherwise using public IPv4 address`
+    - `Connect using private IPv4 address if available, otherwise using public IPv6 address`
     - `Connect using public IPv4 address only`
     - `Connect using public IPv6 address only`
 
