@@ -15,10 +15,9 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import com.gargoylesoftware.htmlunit.html.HtmlButton;
-import com.gargoylesoftware.htmlunit.html.HtmlForm;
-import com.gargoylesoftware.htmlunit.html.HtmlFormUtil;
-import com.gargoylesoftware.htmlunit.html.HtmlPage;
+import org.htmlunit.html.DomElement;
+import org.htmlunit.html.HtmlPage;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -35,15 +34,16 @@ public class HetznerCloudTest {
                 new ArrayList<>());
         j.jenkins.clouds.add(cloud);
         j.jenkins.save();
-        JenkinsRule.WebClient wc = j.createWebClient();
-        HtmlPage p = wc.goTo("configureClouds/");
-        HtmlForm f = p.getFormByName("config");
-        HtmlButton buttonExtends = HtmlFormUtil.getButtonByCaption(f, "Server templates...");
-        buttonExtends.click();
-        HtmlButton buttonAddTemplate = HtmlFormUtil.getButtonByCaption(f, "Add");
-        buttonAddTemplate.click();
-        HtmlButton applyButton = HtmlFormUtil.getButtonByCaption(f, "Apply");
-        applyButton.click();
-        j.submit(f);
+        try (JenkinsRule.WebClient wc = j.createWebClient()) {
+            HtmlPage p = wc.goTo("manage/cloud/");
+            DomElement domElement = p.getElementById("cloud_" + cloud.name);
+            Assert.assertNotNull(domElement);
+            p = wc.goTo("manage/cloud/hcloud-01/configure");
+            Assert.assertTrue("No input with value " + cloud.name, p.getElementsByTagName("input").stream()
+                    .filter(element -> element.hasAttribute("value"))
+                    .anyMatch(element -> cloud.name.equals(element.getAttribute("value"))));
+
+
+        }
     }
 }
