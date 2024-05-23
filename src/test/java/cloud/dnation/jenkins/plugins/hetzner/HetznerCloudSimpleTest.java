@@ -24,14 +24,13 @@ import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
 import jenkins.model.Jenkins;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -41,36 +40,37 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.powermock.api.mockito.PowerMockito.doAnswer;
-import static org.powermock.api.mockito.PowerMockito.mock;
-import static org.powermock.api.mockito.PowerMockito.when;
 
 @Slf4j
-@PowerMockIgnore({
-        "javax.crypto.*",
-        "javax.net.ssl.*",
-        "com.sun.org.apache.xerces.*",
-        "javax.xml.*",
-        "org.xml.*"
-})
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({Jenkins.class, HetznerCloudResourceManager.class})
 public class HetznerCloudSimpleTest {
     private HetznerCloudResourceManager rsrcMgr;
 
+    MockedStatic<Jenkins> jenkinsMock;
+    MockedStatic<HetznerCloudResourceManager> hetznerCloudResourceManagerMockedStatic;
     @Before
     public void setupBefore() {
-        PowerMockito.mockStatic(Jenkins.class, HetznerCloudResourceManager.class);
+        jenkinsMock = Mockito.mockStatic(Jenkins.class);
+        hetznerCloudResourceManagerMockedStatic = Mockito.mockStatic(HetznerCloudResourceManager.class);
+        //PowerMockito.mockStatic(Jenkins.class, HetznerCloudResourceManager.class);
         rsrcMgr = mock(HetznerCloudResourceManager.class);
-        when(HetznerCloudResourceManager.create(anyString())).thenReturn(rsrcMgr);
+        Mockito.when(HetznerCloudResourceManager.create(anyString())).thenReturn(rsrcMgr);
 
         Jenkins jenkins = mock(Jenkins.class);
         doAnswer((Answer<LabelAtom>) invocationOnMock -> new LabelAtom(invocationOnMock.getArgument(0)))
                 .when(jenkins).getLabelAtom(anyString());
-        when(Jenkins.get()).thenReturn(jenkins);
+        Mockito.when(Jenkins.get()).thenReturn(jenkins);
     }
+
+    @After
+    public void cleanMock() {
+        jenkinsMock.close();
+        hetznerCloudResourceManagerMockedStatic.close();
+    }
+
     @Test
     public void testCanProvision() throws IOException {
 
