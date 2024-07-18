@@ -64,8 +64,10 @@ public abstract class AbstractHetznerSshConnector extends AbstractDescribableImp
     }
 
     public static abstract class DescriptorImpl extends Descriptor<AbstractHetznerSshConnector> {
-
+        // this method does not have any side effect, nor does it read any state.
+        @SuppressWarnings("lgtm[jenkins/no-permission-check]")
         @Restricted(NoExternalUse.class)
+        @RequirePOST
         public FormValidation doCheckSshCredentialsId(@QueryParameter String sshCredentialsId) {
             return doCheckNonEmpty(sshCredentialsId, "SSH credentials");
         }
