@@ -277,6 +277,9 @@ It's possible to create images in Hetzner Cloud using Packer.
 - JRE must already be installed on image that is used to create new server instance.
 - Working directory of agent on newly provisioned server must already exist and must be accessible by
   user used to launch agent
+- There is possibility of race condition when build executors are demanded in burst,
+  resulting in creation of more VMs than configured cap allows.
+  No known fix exist at this time, but there is possible workaround mentioned [in comment in reported issue](https://github.com/jenkinsci/hetzner-cloud-plugin/issues/85#issuecomment-2310926683)
 
 ### Common problems
 
