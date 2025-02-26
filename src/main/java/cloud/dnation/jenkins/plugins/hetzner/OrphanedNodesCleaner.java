@@ -45,7 +45,11 @@ public class OrphanedNodesCleaner extends PeriodicWork {
 
     @Override
     protected void doRun() {
-        doCleanup();
+        try {
+            doCleanup();
+        } catch (IllegalStateException e) {
+            log.error("Error while cleaning up orphaned nodes", e);
+        }
     }
 
     static void doCleanup() {

@@ -64,7 +64,7 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
                     log.info("Disconnecting {}", c.getName());
                     try {
                         agent.terminate();
-                    } catch (InterruptedException | IOException e) {
+                    } catch (InterruptedException | IOException | IllegalStateException e) {
                         log.warn("Failed to terminate {}", c.getName(), e);
                     }
                 }
