@@ -177,8 +177,45 @@ public class HetznerCloudResourceManager {
         final long serverId = server.getId();
         final HetznerApi client = proxy();
         try {
+            // Initiate server power off
             assertValidResponse(client.powerOffServer(serverId).execute());
+            log.info("Power off initiated for server with ID = {}, waiting for shutdown...", serverId);
+
+            // Wait for server to be fully powered off
+            boolean isShutdown = false;
+            int attempts = 0;
+            final int maxAttempts = 60; // Maximum wait time: 60 * 5s = 300s (5 minutes)
+
+            while (!isShutdown && attempts < maxAttempts) {
+                attempts++;
+                try {
+                    Thread.sleep(5000); // Wait 5 seconds between checks
+
+                    Response<GetServerByIdResponse> response = client.getServer(serverId).execute();
+                    if (response.isSuccessful() && response.body() != null) {
+                        ServerDetail currentState = response.body().getServer();
+                        if ("off".equals(currentState.getStatus())) {
+                            isShutdown = true;
+                            log.info("Server with ID = {} is now powered off, proceeding with deletion", serverId);
+                        } else {
+                            log.debug("Server with ID = {} is still in '{}' status, waiting...", 
+                                    serverId, currentState.getStatus());
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Interrupted while waiting for server shutdown", e);
+                    break;
+                }
+            }
+
+            if (!isShutdown) {
+                log.warn("Server with ID = {} did not power off within expected time, proceeding with deletion anyway", serverId);
+            }
+
+            // Delete the server
             assertValidResponse(client.deleteServer(serverId).execute());
+            log.info("Server with ID = {} successfully deleted", serverId);
         } catch (IOException e) {
             log.error("Unable to destroy server with ID = {}", serverId, e);
             throw new IllegalStateException(e);
