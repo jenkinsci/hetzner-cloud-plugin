@@ -17,6 +17,7 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
+import hudson.security.ACL;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.plaincredentials.StringCredentials;
 
@@ -36,7 +37,7 @@ public class JenkinsSecretTokenProvider implements Supplier<String> {
     @Override
     public String get() {
         final StringCredentials secret = CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(StringCredentials.class, Jenkins.get()),
+                CredentialsProvider.lookupCredentialsInItemGroup(StringCredentials.class, Jenkins.get(), ACL.SYSTEM2),
                 CredentialsMatchers.withId(credentialsId));
         if (secret == null) {
             throw new IllegalStateException("Can't find credentials with ID '" + credentialsId + "'");

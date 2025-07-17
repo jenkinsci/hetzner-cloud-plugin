@@ -21,6 +21,8 @@ import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.trilead.ssh2.crypto.PEMDecoder;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.security.ACL;
 import jenkins.model.Jenkins;
 import lombok.Getter;
@@ -34,8 +36,6 @@ import org.bouncycastle.crypto.util.OpenSSHPublicKeyUtil;
 import org.slf4j.Logger;
 import retrofit2.Response;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.security.KeyPair;
@@ -78,13 +78,11 @@ public class Helper {
         final PublicKey pk = pair.getPublic();
         final String prefix;
         final AsymmetricKeyParameter keyParam;
-        if (pk instanceof EdDSAPublicKey) {
-            final EdDSAPublicKey edpk = (EdDSAPublicKey) pk;
-            prefix = SSH_ED25519;
+        if (pk instanceof EdDSAPublicKey edpk) {
+          prefix = SSH_ED25519;
             keyParam = new Ed25519PublicKeyParameters(edpk.getAbyte(), 0);
-        } else if (pk instanceof RSAPublicKey) {
-            final RSAPublicKey rsapk = (RSAPublicKey)pk;
-            prefix = SSH_RSA;
+        } else if (pk instanceof RSAPublicKey rsapk) {
+          prefix = SSH_RSA;
             keyParam = new RSAKeyParameters(false, rsapk.getModulus(), rsapk.getPublicExponent());
         } else {
             throw new IllegalArgumentException("PublicKey type not recognized: " + pk.getClass());
@@ -118,10 +116,10 @@ public class Helper {
     }
 
     public static List<Long> idList(String str) {
-        return Arrays.stream(str.split(",")).map(Long::parseLong).collect(Collectors.toList());
+        return Arrays.stream(str.split(",")).map(Long::parseLong).toList();
     }
 
-    public static <T, E> List<E> getPayload(@Nonnull Response<T> response, @Nonnull Function<T, List<E>> mapper) {
+    public static <T, E> List<E> getPayload(@NonNull Response<T> response, @NonNull Function<T, List<E>> mapper) {
         final T body = response.body();
         if (body == null) {
             return Collections.emptyList();
@@ -141,7 +139,7 @@ public class Helper {
 
     public static BasicSSHUserPrivateKey assertSshKey(String credentialsId) {
         final BasicSSHUserPrivateKey privateKey = CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(BasicSSHUserPrivateKey.class, Jenkins.get(), ACL.SYSTEM,
+                CredentialsProvider.lookupCredentialsInItemGroup(BasicSSHUserPrivateKey.class, Jenkins.get(), ACL.SYSTEM2,
                         Collections.emptyList()),
                 CredentialsMatchers.withId(credentialsId));
 
@@ -194,7 +192,7 @@ public class Helper {
      * Note: we keep small time buffer for corner cases like clock skew or Jenkins's queue manager overload, which could
      * lead to unnecessary 1-hour over-billing.
      */
-    public static boolean canShutdownServer(@Nonnull String createdStr, LocalDateTime currentTime) {
+    public static boolean canShutdownServer(@NonNull String createdStr, LocalDateTime currentTime) {
         final LocalDateTime created = LocalDateTime.from(DateTimeFormatter.ISO_DATE_TIME.parse(createdStr))
                 .atOffset(ZoneOffset.UTC).toLocalDateTime();
         long diff = Duration.between(created, currentTime.atOffset(ZoneOffset.UTC).toLocalDateTime()).toMinutes() % 60;

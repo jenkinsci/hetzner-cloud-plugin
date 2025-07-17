@@ -37,7 +37,7 @@ public class ControllerListener extends ComputerListener {
     @Override
     public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
         //on controller startup, check for any orphan VMs in cloud
-        if ("".equals(c.getName())) {
+        if (c.getName().isEmpty()) {
             OrphanedNodesCleaner.doCleanup();
         }
         super.onOnline(c, listener);
@@ -46,7 +46,7 @@ public class ControllerListener extends ComputerListener {
     @Override
     public void onOffline(@NonNull Computer c, OfflineCause cause) {
         //on controller shutdown, terminate any existing Hetzner agent and computer
-        if ("".equals(c.getName())) {
+        if (c.getName().isEmpty()) {
             Helper.getHetznerAgents().forEach(this::terminateAgent);
             Arrays.stream(Jenkins.get().getComputers())
                     .filter(HetznerServerComputer.class::isInstance)

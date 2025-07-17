@@ -20,6 +20,8 @@ import cloud.dnation.jenkins.plugins.hetzner.launcher.AbstractHetznerSshConnecto
 import cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractPrimaryIpStrategy;
 import cloud.dnation.jenkins.plugins.hetzner.shutdown.AbstractShutdownPolicy;
 import com.google.common.base.Strings;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
@@ -31,7 +33,6 @@ import hudson.util.FormValidation;
 import jenkins.model.Jenkins;
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -140,6 +141,7 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     private String volumeIds;
 
     @DataBoundConstructor
+    @SuppressFBWarnings("NP_NONNULL_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR")
     public HetznerServerTemplate(String name, String labelStr, String image,
                                  String location, String serverType) {
         this.name = name;

@@ -29,7 +29,7 @@ public class TestHelper {
     public static String inputStreamAsString(InputStream is) throws IOException {
         ByteArrayOutputStream os = new ByteArrayOutputStream();
         ByteStreams.copy(is, os);
-        return os.toString(StandardCharsets.UTF_8.name());
+        return os.toString(StandardCharsets.UTF_8);
     }
 
     public static String resourceAsString(String name) throws IOException {

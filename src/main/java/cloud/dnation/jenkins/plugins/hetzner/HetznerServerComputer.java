@@ -15,11 +15,11 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.slaves.AbstractCloudComputer;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
 import org.jenkinsci.plugins.cloudstats.TrackedItem;
 
-import javax.annotation.Nonnull;
 
 public class HetznerServerComputer extends AbstractCloudComputer<HetznerServerAgent> implements TrackedItem {
     private final ProvisioningActivity.Id provisioningId;
@@ -29,7 +29,7 @@ public class HetznerServerComputer extends AbstractCloudComputer<HetznerServerAg
         this.provisioningId = agent.getId();
     }
 
-    @Nonnull
+    @NonNull
     @Override
     public ProvisioningActivity.Id getId() {
         return provisioningId;

@@ -81,17 +81,15 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         scp.put(launchScriptContent, AGENT_SCRIPT, remoteFs, "0755");
     }
 
-    @SuppressFBWarnings(value = {"NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE", "NP_NULL_PARAM_DEREF"},
-            justification = "NULLnes is checked already")
     @Override
+    @SuppressFBWarnings(value = "NP_NULL_PARAM_DEREF")
     public void launch(final SlaveComputer computer, TaskListener listener) throws IOException, InterruptedException {
-        if (!(computer instanceof HetznerServerComputer)) {
+        if (!(computer instanceof HetznerServerComputer hcomputer)) {
             throw new AbortException("Incompatible computer : " + computer);
         }
-        if(connector.getConnectionMethod() == null) {
+        if (connector.getConnectionMethod() == null) {
             connector.setConnectionMethod(HetznerConstants.DEFAULT_CONNECTION_METHOD);
         }
-        final HetznerServerComputer hcomputer = (HetznerServerComputer) computer;
         final Helper.LogAdapter logger = new Helper.LogAdapter(listener.getLogger(), log);
         final HetznerServerAgent node = hcomputer.getNode();
         Preconditions.checkState(node != null && node.getServerInstance() != null,
@@ -109,8 +107,6 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         return "java " + jvmOpts + " -jar " + remoteFs + "/remoting.jar -workDir " + remoteFs;
     }
 
-    @SuppressFBWarnings(value = "NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE",
-            justification = "NULLnes of node is checked in launch method")
     private void launchAgent(Connection connection,
                              HetznerServerComputer computer,
                              Helper.LogAdapter logger,

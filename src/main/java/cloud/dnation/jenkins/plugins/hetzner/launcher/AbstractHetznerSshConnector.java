@@ -19,6 +19,7 @@ import com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Item;
@@ -36,7 +37,6 @@ import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import javax.annotation.Nullable;
 import java.util.Collections;
 
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckNonEmpty;
@@ -81,14 +81,14 @@ public abstract class AbstractHetznerSshConnector extends AbstractDescribableImp
                     return result;
                 }
             } else {
-                if (!owner.hasPermission(owner.EXTENDED_READ)
+                if (!owner.hasPermission(Item.EXTENDED_READ)
                         && !owner.hasPermission(CredentialsProvider.USE_ITEM)) {
                     return result;
                 }
             }
             return new StandardListBoxModel()
                     .includeEmptyValue()
-                    .includeMatchingAs(ACL.SYSTEM, owner, BasicSSHUserPrivateKey.class,
+                    .includeMatchingAs(ACL.SYSTEM2, owner, BasicSSHUserPrivateKey.class,
                             Collections.emptyList(), CredentialsMatchers.always());
         }
     }
