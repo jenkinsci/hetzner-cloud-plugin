@@ -50,13 +50,13 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
     @SuppressWarnings("rawtypes")
     private static class RetentionStrategyImpl extends RetentionStrategy<AbstractCloudComputer> {
         @Override
-        public void start(AbstractCloudComputer c) {
+        public void start(@NonNull AbstractCloudComputer c) {
             c.connect(false);
         }
 
         @Override
         @GuardedBy("hudson.model.Queue.lock")
-        public long check(final AbstractCloudComputer c) {
+        public long check(@NonNull final AbstractCloudComputer c) {
             final HetznerServerAgent agent = (HetznerServerAgent) c.getNode();
             if (c.isIdle() && agent != null && agent.getServerInstance() != null) {
                 if (Helper.canShutdownServer(agent.getServerInstance().getServerDetail().getCreated(),

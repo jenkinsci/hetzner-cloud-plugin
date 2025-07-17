@@ -48,7 +48,7 @@ public class ConfigurationValidator {
     static ValidationResult validateCloudConfig(String credentialsId) {
         return validateWithClient(api -> {
             final GetDatacentersResponse result = api.getAllDatacenters().execute().body();
-            Preconditions.checkArgument(result.getDatacenters().size() > 0, "Expected some data");
+            Preconditions.checkArgument(!result.getDatacenters().isEmpty(), "Expected some data");
             return ValidationResult.OK;
         }, credentialsId);
     }

@@ -19,6 +19,7 @@ import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.google.common.primitives.Ints;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
@@ -31,9 +32,9 @@ import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import java.util.Objects;
 import jenkins.model.Jenkins;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.RandomStringUtils;
@@ -91,11 +92,7 @@ public class HetznerCloud extends AbstractCloudImpl {
 
     @DataBoundSetter
     public void setServerTemplates(List<HetznerServerTemplate> serverTemplates) {
-        if (serverTemplates == null) {
-            this.serverTemplates = Collections.emptyList();
-        } else {
-            this.serverTemplates = serverTemplates;
-        }
+      this.serverTemplates = Objects.requireNonNullElse(serverTemplates, Collections.emptyList());
         readResolve();
     }
 
@@ -225,14 +222,14 @@ public class HetznerCloud extends AbstractCloudImpl {
                     return result;
                 }
             } else {
-                if (!owner.hasPermission(owner.EXTENDED_READ)
+                if (!owner.hasPermission(Item.EXTENDED_READ)
                         && !owner.hasPermission(CredentialsProvider.USE_ITEM)) {
                     return result;
                 }
             }
             return new StandardListBoxModel()
                     .includeEmptyValue()
-                    .includeMatchingAs(ACL.SYSTEM, owner, StringCredentialsImpl.class,
+                    .includeMatchingAs(ACL.SYSTEM2, owner, StringCredentialsImpl.class,
                             Collections.emptyList(), CredentialsMatchers.always());
         }
     }

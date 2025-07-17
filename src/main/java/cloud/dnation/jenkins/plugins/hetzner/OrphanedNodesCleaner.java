@@ -59,7 +59,7 @@ public class OrphanedNodesCleaner extends PeriodicWork {
             final List<String> jenkinsNodes = Helper.getHetznerAgents()
                     .stream()
                     .map(HetznerServerAgent::getNodeName)
-                    .collect(Collectors.toList());
+                    .toList();
             allInstances.stream().filter(server -> !jenkinsNodes.contains(server.getName()))
                     .forEach(serverDetail -> terminateServer(serverDetail, cloud));
         } catch (IOException e) {

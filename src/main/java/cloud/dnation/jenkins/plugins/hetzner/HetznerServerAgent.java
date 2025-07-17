@@ -25,6 +25,7 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.EphemeralNode;
+import java.io.Serial;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -33,13 +34,13 @@ import org.jenkinsci.plugins.cloudstats.CloudStatistics;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
 import org.jenkinsci.plugins.cloudstats.TrackedItem;
 
-import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
 public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralNode, TrackedItem {
+    @Serial
     private static final long serialVersionUID = 1;
     private final ProvisioningActivity.Id provisioningId;
     @Getter
@@ -94,7 +95,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
         return this;
     }
 
-    @Nonnull
+    @NonNull
     @Override
     public ProvisioningActivity.Id getId() {
         return provisioningId;

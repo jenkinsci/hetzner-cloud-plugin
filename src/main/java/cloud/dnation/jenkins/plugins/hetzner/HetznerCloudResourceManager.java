@@ -41,8 +41,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.util.Secret;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -198,7 +198,7 @@ public class HetznerCloudResourceManager {
                             isShutdown = true;
                             log.info("Server with ID = {} is now powered off, proceeding with deletion", serverId);
                         } else {
-                            log.debug("Server with ID = {} is still in '{}' status, waiting...", 
+                            log.debug("Server with ID = {} is still in '{}' status, waiting...",
                                     serverId, currentState.getStatus());
                         }
                     }
