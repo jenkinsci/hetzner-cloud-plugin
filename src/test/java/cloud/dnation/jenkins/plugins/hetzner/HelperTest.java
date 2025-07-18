@@ -15,26 +15,26 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class HelperTest {
+class HelperTest {
+
     @Test
-    public void testExtractPublicKeyRSA() throws IOException {
+    void testExtractPublicKeyRSA() throws Exception {
         final String pubKeyStr = TestHelper.resourceAsString("id_rsa.pub");
         final String privKeyStr = TestHelper.resourceAsString("id_rsa");
         assertEquals(pubKeyStr, Helper.getSSHPublicKeyFromPrivate(privKeyStr, null));
     }
 
     @Test
-    public void testExtractPublicKeyED25519() throws IOException {
+    void testExtractPublicKeyED25519() throws Exception {
         final String pubKeyStr = TestHelper.resourceAsString("id_ed25519.pub");
         final String privKeyStr = TestHelper.resourceAsString("id_ed25519");
         assertEquals(pubKeyStr, Helper.getSSHPublicKeyFromPrivate(privKeyStr, null));
@@ -45,7 +45,7 @@ public class HelperTest {
     }
 
     @Test
-    public void testCanShutdownServer() {
+    void testCanShutdownServer() {
         //server started at 10:41 UTC, so it can be shutdown in minutes 36-40
         String str = "2022-05-21T10:41:19+00:00";
         assertFalse(Helper.canShutdownServer(str, time("2022-05-21T10:50:11")));
@@ -67,14 +67,14 @@ public class HelperTest {
     }
 
     @Test
-    public void testIsPossiblyLong() {
+    void testIsPossiblyLong() {
         assertTrue(Helper.isPossiblyLong("1"));
         assertFalse(Helper.isPossiblyLong("0"));
         assertFalse(Helper.isPossiblyLong("not-a-number"));
     }
 
     @Test
-    public void testIsValidLabelValue() {
+    void testIsValidLabelValue() {
         assertFalse(Helper.isValidLabelValue(""));
         assertFalse(Helper.isValidLabelValue(null));
         assertTrue(Helper.isValidLabelValue("cloud-01"));

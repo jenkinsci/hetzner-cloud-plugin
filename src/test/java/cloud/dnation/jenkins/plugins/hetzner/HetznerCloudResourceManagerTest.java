@@ -17,16 +17,15 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.CreateServerRequest;
 import cloud.dnation.jenkins.plugins.hetzner.connect.ConnectivityType;
-import org.junit.Test;
-
-import java.io.IOException;
+import org.junit.jupiter.api.Test;
 
 import static cloud.dnation.jenkins.plugins.hetzner.HetznerCloudResourceManager.customizeNetworking;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class HetznerCloudResourceManagerTest {
+class HetznerCloudResourceManagerTest {
+
     @Test
-    public void testCustomizeNetworking() throws IOException {
+    void testCustomizeNetworking() throws Exception {
         CreateServerRequest req;
 
         req = new CreateServerRequest();

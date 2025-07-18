@@ -19,21 +19,22 @@ import cloud.dnation.hetznerclient.Ipv4Detail;
 import cloud.dnation.hetznerclient.Ipv6Detail;
 import cloud.dnation.hetznerclient.PublicNetDetail;
 import cloud.dnation.hetznerclient.ServerDetail;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class TestPublicV6AddressOnly {
-    @Test(expected = IllegalArgumentException.class)
-    public void testMissingV6Address() {
+class TestPublicV6AddressOnly {
+
+    @Test
+    void testMissingV6Address() {
         final PublicV6AddressOnly addr = new PublicV6AddressOnly();
-        addr.getAddress(new ServerDetail().publicNet(new PublicNetDetail().ipv4(new Ipv4Detail())));
-        fail();
+        assertThrows(IllegalArgumentException.class, () ->
+            addr.getAddress(new ServerDetail().publicNet(new PublicNetDetail().ipv4(new Ipv4Detail()))));
     }
 
     @Test
-    public void testValid() {
+    void testValid() {
         final PublicV6AddressOnly addr = new PublicV6AddressOnly();
         final String res = addr.getAddress(new ServerDetail().publicNet(
                 new PublicNetDetail().ipv6(new Ipv6Detail().ip("2a01:4e3:a0a:9b7b::/64"))));

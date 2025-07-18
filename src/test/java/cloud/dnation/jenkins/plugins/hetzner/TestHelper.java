@@ -17,22 +17,25 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Resources;
+import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 @UtilityClass
 public class TestHelper {
-    public static String inputStreamAsString(InputStream is) throws IOException {
+
+    @SneakyThrows
+    public static String inputStreamAsString(InputStream is) {
         ByteArrayOutputStream os = new ByteArrayOutputStream();
         ByteStreams.copy(is, os);
         return os.toString(StandardCharsets.UTF_8);
     }
 
-    public static String resourceAsString(String name) throws IOException {
+    @SneakyThrows
+    public static String resourceAsString(String name) {
         try (InputStream is = Resources.getResource(name).openStream()) {
             return inputStreamAsString(is);
         }
