@@ -19,23 +19,21 @@ import io.jenkins.plugins.casc.ConfigurationContext;
 import io.jenkins.plugins.casc.ConfiguratorRegistry;
 import io.jenkins.plugins.casc.misc.ConfiguredWithCode;
 import io.jenkins.plugins.casc.misc.JenkinsConfiguredWithCodeRule;
+import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
 import jenkins.model.Jenkins;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class JCasCTest {
-
-    @ClassRule
-    @ConfiguredWithCode("jcasc.yaml")
-    public static JenkinsConfiguredWithCodeRule j = new JenkinsConfiguredWithCodeRule();
+@WithJenkinsConfiguredWithCode
+class JCasCTest {
 
     @Test
-    public void testConfigure() {
+    @ConfiguredWithCode("jcasc.yaml")
+    void testConfigure(JenkinsConfiguredWithCodeRule j) {
         final HetznerCloud cloud = (HetznerCloud) Jenkins.get().clouds.getByName("hcloud-01");
         assertNotNull(cloud);
         assertEquals("hcloud-01", cloud.getDisplayName());
@@ -46,7 +44,8 @@ public class JCasCTest {
     }
 
     @Test
-    public void testExport() throws Exception {
+    @ConfiguredWithCode("jcasc.yaml")
+    void testExport(JenkinsConfiguredWithCodeRule j) throws Exception {
         final ConfigurationContext ctx = new ConfigurationContext(ConfiguratorRegistry.get());
         final CNode cloud = getJenkinsRoot(ctx).get("clouds");
         assertNotNull(cloud);

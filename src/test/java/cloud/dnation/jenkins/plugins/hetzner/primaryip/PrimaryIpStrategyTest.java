@@ -19,17 +19,19 @@ import cloud.dnation.hetznerclient.CreateServerRequest;
 import cloud.dnation.hetznerclient.DatacenterDetail;
 import cloud.dnation.hetznerclient.LocationDetail;
 import cloud.dnation.hetznerclient.PrimaryIpDetail;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static cloud.dnation.jenkins.plugins.hetzner.primaryip.AbstractByLabelSelector.isIpUsable;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class PrimaryIpStrategyTest {
+class PrimaryIpStrategyTest {
+
     private static final DatacenterDetail FSN1DC14;
     private static final DatacenterDetail NBG1DC4;
     private static final LocationDetail FSN1;
     private static final LocationDetail NBG1;
+
     static {
         FSN1 = new LocationDetail();
         FSN1.setName("fsn1");
@@ -42,8 +44,9 @@ public class PrimaryIpStrategyTest {
         NBG1DC4.setName("nbg1-dc3");
         NBG1DC4.setLocation(NBG1);
     }
+
     @Test
-    public void testIpIsUsable() {
+    void testIpIsUsable() {
         final CreateServerRequest server = new CreateServerRequest();
         final PrimaryIpDetail ip = new PrimaryIpDetail();
         //Same datacenter

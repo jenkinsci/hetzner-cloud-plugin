@@ -17,19 +17,28 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import org.htmlunit.html.DomElement;
 import org.htmlunit.html.HtmlPage;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 
 import java.util.ArrayList;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
-public class HetznerCloudTest {
-    @Rule
-    public JenkinsRule j = new JenkinsRule();
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@WithJenkins
+class HetznerCloudTest {
+
+    private JenkinsRule j;
+
+    @BeforeEach
+    void setUp(JenkinsRule rule) {
+        j = rule;
+    }
 
     @Test
-    public void test() throws Exception {
+    void test() throws Exception {
         final HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-credentials", "10",
                 new ArrayList<>());
         j.jenkins.clouds.add(cloud);
@@ -37,13 +46,11 @@ public class HetznerCloudTest {
         try (JenkinsRule.WebClient wc = j.createWebClient()) {
             HtmlPage p = wc.goTo("manage/cloud/");
             DomElement domElement = p.getElementById("cloud_" + cloud.name);
-            Assert.assertNotNull(domElement);
+            assertNotNull(domElement);
             p = wc.goTo("manage/cloud/hcloud-01/configure");
-            Assert.assertTrue("No input with value " + cloud.name, p.getElementsByTagName("input").stream()
+            assertTrue(p.getElementsByTagName("input").stream()
                     .filter(element -> element.hasAttribute("value"))
-                    .anyMatch(element -> cloud.name.equals(element.getAttribute("value"))));
-
-
+                    .anyMatch(element -> cloud.name.equals(element.getAttribute("value"))), "No input with value " + cloud.name);
         }
     }
 }
