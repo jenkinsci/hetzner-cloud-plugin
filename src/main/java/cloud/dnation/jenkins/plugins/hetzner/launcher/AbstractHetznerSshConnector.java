@@ -57,10 +57,21 @@ public abstract class AbstractHetznerSshConnector extends AbstractDescribableImp
 
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
+    protected int sshPort = 22;
+
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
     protected AbstractConnectionMethod connectionMethod = DefaultConnectionMethod.SINGLETON;
 
     public HetznerServerComputerLauncher createLauncher() {
         return new HetznerServerComputerLauncher(this);
+    }
+
+    protected Object readResolve() {
+        if (sshPort == 0) {
+            sshPort = 22;
+        }
+        return this;
     }
 
     public static abstract class DescriptorImpl extends Descriptor<AbstractHetznerSshConnector> {
