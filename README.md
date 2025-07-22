@@ -95,6 +95,9 @@ Following attributes are **required** for each server template:
     - `Connect using public IPv4 address only`
     - `Connect using public IPv6 address only`
 
+  Default SSH port (`22`) can be overridden to other value.
+  Agent VM must be configured for such port already, otherwise SSH connection won't be established.
+
 - `Labels` - Labels that identifies jobs that could run on node created from this template.
   Multiple values can be specified when separated by space.
   When no labels are specified and usage mode is set to <strong>Use this node as much as possible</strong>,
@@ -202,6 +205,7 @@ jenkins:
             connector:
               root:
                 sshCredentialsId: 'ssh-private-key'
+                sshPort: 1022
                 connectionMethod: "default"
             shutdownPolicy: "hour-wrap"
           - name: ubuntu2-cx31

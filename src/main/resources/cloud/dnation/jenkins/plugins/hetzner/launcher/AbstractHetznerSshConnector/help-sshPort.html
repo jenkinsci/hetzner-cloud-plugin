@@ -1,5 +1,5 @@
 <!--
-     Copyright 2021 https://dnation.cloud
+     Copyright 2025 https://dnation.cloud
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -13,13 +13,6 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
-    <f:entry field="sshCredentialsId" title="${%SSHKey}">
-        <c:select checkMethod="post" />
-    </f:entry>
-    <f:entry field="sshPort" title="${%SSH port}">
-        <f:textbox/>
-    </f:entry>
-    <f:dropdownDescriptorSelector field="connectionMethod" title="IP address selection" />
-</j:jelly>
+<div>
+    SSH port number for client connection.
+</div>

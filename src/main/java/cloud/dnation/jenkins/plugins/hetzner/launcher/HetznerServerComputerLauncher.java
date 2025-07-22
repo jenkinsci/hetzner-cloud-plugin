@@ -90,6 +90,9 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         if (connector.getConnectionMethod() == null) {
             connector.setConnectionMethod(HetznerConstants.DEFAULT_CONNECTION_METHOD);
         }
+        if (connector.getSshPort() == 0) {
+            connector.setSshPort(22);
+        }
         final Helper.LogAdapter logger = new Helper.LogAdapter(listener.getLogger(), log);
         final HetznerServerAgent node = hcomputer.getNode();
         Preconditions.checkState(node != null && node.getServerInstance() != null,
@@ -145,11 +148,12 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
         while (!terminated.get() && retries-- > 0) {
             final ServerDetail serverDetail = node.getServerInstance().getServerDetail();
             final String ipv4 = connector.getConnectionMethod().getAddress(serverDetail);
-            final Connection conn = new Connection(ipv4, 22);
+            final int port = connector.getSshPort();
+            final Connection conn = new Connection(ipv4, port);
             try {
                 conn.connect(AllowAnyServerHostKeyVerifier.INSTANCE,
                         30_000, 10_000);
-                logger.info("Connected to " + node.getNodeName() + " via " + ipv4);
+                logger.info("Connected to " + node.getNodeName() + " via " + ipv4 + ":" + port);
                 final String credentialsId = node.getTemplate().getConnector().getSshCredentialsId();
                 final BasicSSHUserPrivateKey privateKey = assertSshKey(credentialsId);
                 final String username = Util.fixNull(node.getTemplate().getConnector().getUsernameOverride(),
