@@ -49,6 +49,11 @@
                           with="firewall,credentialsId"/>
     </f:entry>
     <f:advanced title="${%Advanced}" align="left">
+        <f:entry title="${%Prefix}" field="prefix">
+            <f:textbox/>
+            <f:validateButton title="Verify prefix value" progress="${%Testing...}" method="verifyPrefix"
+                              with="prefix"/>
+        </f:entry>
         <f:entry title="${%Remote directory}" default="/home/jenkins" field="remoteFs">
             <f:textbox/>
         </f:entry>

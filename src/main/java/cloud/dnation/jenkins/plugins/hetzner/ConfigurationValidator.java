@@ -264,6 +264,13 @@ public class ConfigurationValidator {
         return FormValidation.ok();
     }
 
+    public static FormValidation verifyPrefix(String prefix) {
+        if(HetznerServerTemplate.checkPrefixValue(prefix)) {
+            return FormValidation.ok();
+        }
+        return FormValidation.error("Invalid prefix: " + prefix);
+    }
+
     // can't use java.util.Function due to declared checked exception
     private interface ValidationAction {
         ValidationResult validate(HetznerApi client) throws Exception;

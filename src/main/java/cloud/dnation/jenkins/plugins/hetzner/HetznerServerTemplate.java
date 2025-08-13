@@ -36,6 +36,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.RandomStringUtils;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -45,7 +46,9 @@ import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckNonEmpty;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckPositiveInt;
@@ -54,6 +57,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verif
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyLocation;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyNetwork;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyPlacementGroup;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyPrefix;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyServerType;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyVolumes;
 import static cloud.dnation.jenkins.plugins.hetzner.Helper.getStringOrDefault;
@@ -62,6 +66,7 @@ import static cloud.dnation.jenkins.plugins.hetzner.HetznerConstants.DEFAULT_REM
 @ToString
 @Slf4j
 public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServerTemplate> {
+    private static final Pattern PREFIX_RE = Pattern.compile("^[a-z][\\w_-]+$");
     @Getter
     private final String name;
 
@@ -120,6 +125,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
     private String firewall;
+
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private String prefix;
 
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
@@ -187,7 +196,25 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         if (volumeIds == null) {
             volumeIds = "";
         }
+        if (prefix == null) {
+            prefix = "";
+        }
+        prefix = prefix.toLowerCase(Locale.ROOT);
         return this;
+    }
+
+    boolean isPrefixValid() {
+        return checkPrefixValue(prefix);
+    }
+
+    static boolean checkPrefixValue(String prefixStr) {
+        return PREFIX_RE.matcher(prefixStr).matches();
+    }
+
+    String generateNodeName() {
+        final String prefixStr = isPrefixValid() ? prefix : "hcloud";
+        return  prefixStr + "-" + RandomStringUtils.randomAlphanumeric(16)
+                .toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -216,6 +243,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         @NonNull
         public String getDisplayName() {
             return Messages.serverTemplate_displayName();
+        }
+
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
+        public FormValidation doVerifyPrefix(@QueryParameter String prefix) {
+            return verifyPrefix(prefix);
         }
 
         @Restricted(NoExternalUse.class)
