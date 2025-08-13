@@ -127,6 +127,9 @@ These additional attributes can be specified, but are not required:
   No support for multiple firewalls is planned.
   If you need to apply multiple rules, combine then into single firewall instance.
 
+- `Prefix` - optional name prefix for provisioned node. Must match regular expression `^[a-z][\w_-]+$`.
+  When omitted or if specified value does not match pattern above, then `hcloud` will be used instead.
+
 - `Remote directory` - agent working directory. When omitted, default value of `/home/jenkins` will be used.
   **This path must exist on agent node prior to launch.**
 

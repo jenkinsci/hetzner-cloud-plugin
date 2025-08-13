@@ -1,5 +1,5 @@
 <!--
-     Copyright 2021 https://dnation.cloud
+     Copyright 2025 https://dnation.cloud
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -14,9 +14,7 @@
  limitations under the License.
 -->
 <div>
-    Provide a name for this Hetzner Cloud.
-    Must be a valid <a href="https://docs.hetzner.cloud/reference/cloud#labels">label value</a>.
+    Optional prefix for node name. Must match regular expression <code>^[a-z][\w_-]+$</code>.
     <p>
-    <i>Valid label values must be a string of 63 characters or less and must be empty or begin and end with an alphanumeric character ([a-z0-9A-Z]) with dashes (-), underscores (_), dots (.), and alphanumerics between.</i>
-    </p>
+    When omitted or if specified value does not match pattern above, then <code>hcloud-</code> will be used instead.
 </div>

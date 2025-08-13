@@ -139,8 +139,7 @@ public class HetznerCloud extends AbstractCloudImpl {
                             instanceCap, running , excessWorkload);
                     break;
                 } else {
-                    final String serverName = "hcloud-" + RandomStringUtils.randomAlphanumeric(16)
-                            .toLowerCase(Locale.ROOT);
+                    final String serverName = template.generateNodeName();
                     final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
                             serverName);
                     final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
