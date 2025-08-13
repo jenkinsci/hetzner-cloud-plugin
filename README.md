@@ -123,6 +123,10 @@ These additional attributes can be specified, but are not required:
 - `Network` - Network ID (integer) or label expression that resolves into single network. When specified, **private IP address will be used instead of public**,
    so Jenkins controller must be part of same network (or have other means) to communicate with newly created server
 
+- `Firewall` - Firewall ID (integer) or a label expression that resolves into single firewall.
+  No support for multiple firewalls is planned.
+  If you need to apply multiple rules, combine then into single firewall instance.
+
 - `Remote directory` - agent working directory. When omitted, default value of `/home/jenkins` will be used.
   **This path must exist on agent node prior to launch.**
 

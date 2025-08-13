@@ -17,10 +17,12 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.AbstractSearchResponse;
 import cloud.dnation.hetznerclient.ClientFactory;
+import cloud.dnation.hetznerclient.CreateServerFirewallsRequest;
 import cloud.dnation.hetznerclient.CreateServerRequest;
 import cloud.dnation.hetznerclient.CreateServerResponse;
 import cloud.dnation.hetznerclient.CreateSshKeyRequest;
 import cloud.dnation.hetznerclient.CreateSshKeyResponse;
+import cloud.dnation.hetznerclient.GetFirewallsBySelectorResponse;
 import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
 import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
 import cloud.dnation.hetznerclient.GetPlacementGroupsResponse;
@@ -137,6 +139,21 @@ public class HetznerCloudResourceManager {
     private long getNetworkIdForLabelExpression(String labelExpression) throws IOException {
         return searchResourceByLabelExpression(labelExpression, proxy()::getNetworkBySelector,
                 GetNetworksBySelectorResponse::getNetworks);
+    }
+
+    /**
+     * Attempt to obtain firewall ID based on label expression.
+     * It's expected that provided label expression resolves to single firewall.
+     *
+     * @param labelExpression label expression used to filter firewall
+     * @return firewall ID
+     * @throws IOException              if fails to make API call
+     * @throws IllegalStateException    if there was invalid response from API server
+     * @throws IllegalArgumentException if label expression didn't yield single firewall
+     */
+    private long getFirewallIdForLabelExpression(String labelExpression) throws IOException {
+        return searchResourceByLabelExpression(labelExpression, proxy()::getFirewallsBySelector,
+                GetFirewallsBySelectorResponse::getFirewalls);
     }
 
     /**
@@ -354,6 +371,16 @@ public class HetznerCloudResourceManager {
                     createServerRequest.setPlacementGroup(Long.parseLong(placementGroup));
                 } else {
                     createServerRequest.setPlacementGroup(getPlacementGroupForLabelExpression(placementGroup));
+                }
+            }
+            final String firewall = agent.getTemplate().getFirewall();
+            if (!Strings.isNullOrEmpty(agent.getTemplate().getFirewall())) {
+                if(Helper.isPossiblyLong(firewall)) {
+                    createServerRequest.setFirewalls(List.of(new CreateServerFirewallsRequest().
+                            firewall(Long.parseLong(firewall))));
+                } else {
+                    createServerRequest.setFirewalls(List.of(new CreateServerFirewallsRequest().
+                            firewall(getFirewallIdForLabelExpression(firewall))));
                 }
             }
             if (!Strings.isNullOrEmpty(agent.getTemplate().getUserData())) {
