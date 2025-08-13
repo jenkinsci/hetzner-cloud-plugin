@@ -17,6 +17,8 @@ package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.ClientFactory;
 import cloud.dnation.hetznerclient.GetDatacentersResponse;
+import cloud.dnation.hetznerclient.GetFirewallByIdResponse;
+import cloud.dnation.hetznerclient.GetFirewallsBySelectorResponse;
 import cloud.dnation.hetznerclient.GetImageByIdResponse;
 import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
 import cloud.dnation.hetznerclient.GetLocationsResponse;
@@ -137,6 +139,25 @@ public class ConfigurationValidator {
                         result.getNetwork().getName() + " " + result.getNetwork().getIpRange());
             } else {
                 return new ValidationResult(false, "Network expression unsupported : " + network);
+            }
+        }, credentialsId);
+    }
+
+    static ValidationResult verifyFirewall(String firewall, String credentialsId) {
+        if (Strings.isNullOrEmpty(firewall)) {
+            return new ValidationResult(false, "Firewall label expression is empty");
+        }
+        return validateWithClient(api -> {
+            if (Helper.isLabelExpression(firewall)) {
+                final GetFirewallsBySelectorResponse result = api.getFirewallsBySelector(firewall).execute().body();
+                Preconditions.checkArgument(result.getFirewalls().size() == 1,
+                        "Expected exactly one result, got %s", result.getFirewalls().size());
+                return new ValidationResult(true, "Found: " + result.getFirewalls().get(0).getName());
+            } else if (Helper.isPossiblyLong(firewall)) {
+                final GetFirewallByIdResponse result = api.getFirewallById(Long.parseLong(firewall)).execute().body();
+                return new ValidationResult(true, "Found: " + result.getFirewall().getName());
+            } else {
+                return new ValidationResult(false, "Firewall expression unsupported : " + firewall);
             }
         }, credentialsId);
     }

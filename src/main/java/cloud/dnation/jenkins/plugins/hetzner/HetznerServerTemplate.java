@@ -49,6 +49,7 @@ import java.util.Set;
 
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckNonEmpty;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.doCheckPositiveInt;
+import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyFirewall;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyImage;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyLocation;
 import static cloud.dnation.jenkins.plugins.hetzner.ConfigurationValidator.verifyNetwork;
@@ -115,6 +116,10 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
     private String network;
+
+    @Getter
+    @Setter(onMethod = @__({@DataBoundSetter}))
+    private String firewall;
 
     @Getter
     @Setter(onMethod = @__({@DataBoundSetter}))
@@ -232,6 +237,13 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         public FormValidation doVerifyNetwork(@QueryParameter String network,
                                               @QueryParameter String credentialsId) {
             return verifyNetwork(network, credentialsId).toFormValidation();
+        }
+
+        @Restricted(NoExternalUse.class)
+        @RequirePOST
+        public FormValidation doVerifyFirewall(@QueryParameter String firewall,
+                                              @QueryParameter String credentialsId) {
+            return verifyFirewall(firewall, credentialsId).toFormValidation();
         }
 
         @Restricted(NoExternalUse.class)
