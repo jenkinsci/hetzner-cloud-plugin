@@ -134,7 +134,7 @@ public class ConfigurationValidator {
                         result.getNetworks().get(0).getName() + " " +
                         result.getNetworks().get(0).getIpRange());
             } else if (Helper.isPossiblyLong(network)) {
-                final GetNetworkByIdResponse result = api.getNetworkById(Integer.parseInt(network)).execute().body();
+                final GetNetworkByIdResponse result = api.getNetworkById(Long.parseLong(network)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getNetwork().getName() + " " + result.getNetwork().getIpRange());
             } else {
@@ -175,7 +175,7 @@ public class ConfigurationValidator {
                         result.getPlacementGroups().get(0).getName() + " " +
                         result.getPlacementGroups().get(0).getId());
             } else if (Helper.isPossiblyLong(placementGroup)) {
-                final GetPlacementGroupByIdResponse result = api.getPlacementGroupById(Integer.parseInt(placementGroup)).execute().body();
+                final GetPlacementGroupByIdResponse result = api.getPlacementGroupById(Long.parseLong(placementGroup)).execute().body();
                 return new ValidationResult(true, "Found: " +
                         result.getPlacementGroup().getName() + " " + result.getPlacementGroup().getId());
             } else {
