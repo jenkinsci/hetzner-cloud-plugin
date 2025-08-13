@@ -130,7 +130,7 @@ public class HetznerCloudResourceManager {
      * Attempt to obtain network ID based on label expression.
      * It's expected that provided label expression resolves to single network.
      *
-     * @param labelExpression label expression used to filter image
+     * @param labelExpression label expression used to filter network
      * @return network ID
      * @throws IOException              if fails to make API call
      * @throws IllegalStateException    if there was invalid response from API server
