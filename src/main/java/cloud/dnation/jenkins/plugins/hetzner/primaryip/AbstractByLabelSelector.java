@@ -17,6 +17,7 @@ package cloud.dnation.jenkins.plugins.hetzner.primaryip;
 
 import cloud.dnation.hetznerclient.CreateServerRequest;
 import cloud.dnation.hetznerclient.HetznerApi;
+import cloud.dnation.hetznerclient.PagedResourceHelper;
 import cloud.dnation.hetznerclient.PrimaryIpDetail;
 import cloud.dnation.hetznerclient.PublicNetRequest;
 import com.google.common.annotations.VisibleForTesting;
@@ -38,7 +39,7 @@ public abstract class AbstractByLabelSelector extends AbstractPrimaryIpStrategy 
 
     @Override
     public void applyInternal(HetznerApi api, CreateServerRequest server) throws IOException {
-        final PrimaryIpDetail pip = api.getAllPrimaryIps(selector).execute().body().getPrimaryIps().stream()
+        final PrimaryIpDetail pip = PagedResourceHelper.getAllPrimaryIps(api, selector).stream()
                 .filter(ip -> isIpUsable(ip, server)).findFirst().get();
         final PublicNetRequest net = new PublicNetRequest();
         net.setIpv4(pip.getId());
