@@ -27,11 +27,10 @@ import cloud.dnation.hetznerclient.GetImagesBySelectorResponse;
 import cloud.dnation.hetznerclient.GetNetworksBySelectorResponse;
 import cloud.dnation.hetznerclient.GetPlacementGroupsResponse;
 import cloud.dnation.hetznerclient.GetServerByIdResponse;
-import cloud.dnation.hetznerclient.GetServersBySelectorResponse;
 import cloud.dnation.hetznerclient.GetSshKeysBySelectorResponse;
 import cloud.dnation.hetznerclient.HetznerApi;
 import cloud.dnation.hetznerclient.IdentifiableResource;
-import cloud.dnation.hetznerclient.Meta;
+import cloud.dnation.hetznerclient.PagedResourceHelper;
 import cloud.dnation.hetznerclient.PublicNetRequest;
 import cloud.dnation.hetznerclient.ServerDetail;
 import cloud.dnation.hetznerclient.SshKeyDetail;
@@ -52,7 +51,6 @@ import retrofit2.Call;
 import retrofit2.Response;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -413,22 +411,8 @@ public class HetznerCloudResourceManager {
     }
 
     public List<ServerDetail> fetchAllServers(String cloudName) throws IOException {
-        final List<ServerDetail> result = new ArrayList<>();
-        final HetznerApi client = proxy();
         final String selector = createLabelsForServer(cloudName).entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
                 .collect(Collectors.joining(","));
-        for (int page = 1; ; page++) {
-            final Response<GetServersBySelectorResponse> pagedResult = client.getServersBySelector(selector,
-                            page, 50)
-                    .execute();
-            assertValidResponse(pagedResult);
-            final Meta meta = pagedResult.body().getMeta();
-            final List<ServerDetail> currentPage = pagedResult.body().getServers();
-            result.addAll(currentPage);
-            if (meta.getPagination().getNextPage() == null) {
-                break;
-            }
-        }
-        return result;
+        return PagedResourceHelper.getAllServers(proxy(), selector);
     }
 }
