@@ -207,7 +207,8 @@ public class HetznerCloudResourceManager {
                     Thread.sleep(5000); // Wait 5 seconds between checks
 
                     Response<GetServerByIdResponse> response = client.getServer(serverId).execute();
-                    if (response.isSuccessful() && response.body() != null) {
+                    if (response.isSuccessful() && response.body() != null
+                            && response.body().getServer() != null) {
                         ServerDetail currentState = response.body().getServer();
                         if ("off".equals(currentState.getStatus())) {
                             isShutdown = true;
@@ -231,9 +232,17 @@ public class HetznerCloudResourceManager {
             // Delete the server
             assertValidResponse(client.deleteServer(serverId).execute());
             log.info("Server with ID = {} successfully deleted", serverId);
-        } catch (IOException e) {
-            log.error("Unable to destroy server with ID = {}", serverId, e);
-            throw new IllegalStateException(e);
+        } catch (Exception e) {
+            // Catch ALL exceptions (IOException, IllegalStateException from
+            // assertValidResponse on HTTP 429/412, and any other RuntimeException).
+            // This method is called from _terminate() and OrphanedNodesCleaner,
+            // both running inside periodic timers. An unchecked exception here
+            // kills the timer thread permanently, disabling idle cleanup for
+            // ALL nodes on this Jenkins instance.
+            // The OrphanedNodesCleaner will retry deletion on its next hourly run.
+            log.error("Unable to destroy server with ID = {} (name={}). "
+                    + "Server may become orphaned and will be retried by OrphanedNodesCleaner.",
+                    serverId, server.getName(), e);
         }
     }
 
@@ -274,15 +283,11 @@ public class HetznerCloudResourceManager {
      * @throws IllegalArgumentException if server didn't respond with code HTTP200
      * @throws IllegalStateException    if API call fails
      */
-    public HetznerServerInfo refreshServerInfo(HetznerServerInfo info) {
-        try {
-            final Response<GetServerByIdResponse> response = proxy().getServer(info.getServerDetail().getId())
-                    .execute();
-            info.setServerDetail(assertValidResponse(response, GetServerByIdResponse::getServer));
-            return info;
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
+    public HetznerServerInfo refreshServerInfo(HetznerServerInfo info) throws IOException {
+        final Response<GetServerByIdResponse> response = proxy().getServer(info.getServerDetail().getId())
+                .execute();
+        info.setServerDetail(assertValidResponse(response, GetServerByIdResponse::getServer));
+        return info;
     }
 
     @SneakyThrows
@@ -400,6 +405,20 @@ public class HetznerCloudResourceManager {
             log.debug("Calling API to create server resource : {}", createServerRequest);
             final Response<CreateServerResponse> createServerResponse = proxy().createServer(createServerRequest)
                     .execute();
+            if (!createServerResponse.isSuccessful()) {
+                String errorBody = null;
+                try {
+                    if (createServerResponse.errorBody() != null) {
+                        errorBody = createServerResponse.errorBody().string();
+                    }
+                } catch (IOException ignored) {
+                    // best effort
+                }
+                String errorCode = Helper.parseHetznerErrorCode(errorBody);
+                throw new IllegalStateException(
+                        String.format("Hetzner API error creating server: HTTP %d, code=%s, body=%s",
+                                createServerResponse.code(), errorCode, errorBody));
+            }
             final HetznerServerInfo info = new HetznerServerInfo(sshKey);
             info.setServerDetail(assertValidResponse(createServerResponse, CreateServerResponse::getServer));
             return info;

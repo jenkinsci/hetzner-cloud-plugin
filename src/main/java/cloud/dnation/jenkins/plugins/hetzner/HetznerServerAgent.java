@@ -50,7 +50,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
     private final transient HetznerServerTemplate template;
     @Getter(AccessLevel.PUBLIC)
     @Setter(AccessLevel.PACKAGE)
-    private transient HetznerServerInfo serverInstance;
+    private transient volatile HetznerServerInfo serverInstance;
 
     public HetznerServerAgent(@NonNull ProvisioningActivity.Id provisioningId,
                               @NonNull String name, String remoteFS, ComputerLauncher launcher,
@@ -75,19 +75,64 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
 
     @Override
     public String getDisplayName() {
-        if (serverInstance != null && serverInstance.getServerDetail() != null) {
-            return getNodeName() + " in " + serverInstance.getServerDetail().getDatacenter()
-                    .getLocation().getDescription();
+        try {
+            if (serverInstance != null && serverInstance.getServerDetail() != null
+                    && serverInstance.getServerDetail().getDatacenter() != null
+                    && serverInstance.getServerDetail().getDatacenter().getLocation() != null) {
+                return getNodeName() + " in " + serverInstance.getServerDetail()
+                        .getDatacenter().getLocation().getDescription();
+            }
+        } catch (Exception e) {
+            log.debug("Could not resolve display name for {}: {}", getNodeName(), e.getMessage());
         }
         return super.getDisplayName();
     }
 
     @Override
     protected void _terminate(TaskListener listener) {
-        ((HetznerServerComputerLauncher) getLauncher()).signalTermination();
-        cloud.getResourceManager().destroyServer(serverInstance.getServerDetail());
-        Optional.ofNullable(CloudStatistics.get().getActivityFor(this))
-                .ifPresent(a -> a.enterIfNotAlready(ProvisioningActivity.Phase.COMPLETED));
+        // Signal termination to the launcher. Guard against ClassCastException
+        // after deserialization (launcher type may change).
+        try {
+            if (getLauncher() instanceof HetznerServerComputerLauncher hLauncher) {
+                hLauncher.signalTermination();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to signal termination for node {}: {}", getNodeName(), e.getMessage());
+        }
+
+        // Destroy the Hetzner VM. Guard against null transient fields (cloud,
+        // serverInstance) which are null after Jenkins restart/deserialization,
+        // and against API failures that throw IllegalStateException.
+        try {
+            if (cloud == null) {
+                log.error("Cannot destroy server for node {}: cloud reference is null "
+                        + "(transient field lost after Jenkins restart). "
+                        + "Server will be cleaned up by OrphanedNodesCleaner.", getNodeName());
+            } else if (serverInstance == null || serverInstance.getServerDetail() == null) {
+                log.error("Cannot destroy server for node {}: serverInstance is null "
+                        + "(transient field lost after Jenkins restart). "
+                        + "Server will be cleaned up by OrphanedNodesCleaner.", getNodeName());
+            } else {
+                cloud.getResourceManager().destroyServer(serverInstance.getServerDetail());
+            }
+        } catch (Exception e) {
+            // Log but do NOT propagate. An unchecked exception here kills
+            // ComputerRetentionWork's periodic timer, permanently stopping
+            // idle cleanup for ALL nodes on this Jenkins instance.
+            log.error("Failed to destroy server for node {} (id={}). "
+                    + "Server will be cleaned up by OrphanedNodesCleaner.",
+                    getNodeName(),
+                    serverInstance != null && serverInstance.getServerDetail() != null
+                            ? serverInstance.getServerDetail().getId() : "unknown",
+                    e);
+        }
+
+        try {
+            Optional.ofNullable(CloudStatistics.get().getActivityFor(this))
+                    .ifPresent(a -> a.enterIfNotAlready(ProvisioningActivity.Phase.COMPLETED));
+        } catch (Exception e) {
+            log.debug("Failed to update CloudStatistics for {}: {}", getNodeName(), e.getMessage());
+        }
     }
 
     @Override
@@ -104,11 +149,27 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
     /**
      * Check if server associated with this agent is running.
      *
-     * @return <code>true</code> if status of server is "running", <code>false</code> otherwise
+     * @return {@code true} if status of server is "running", {@code false} otherwise
      */
     public boolean isAlive() {
-        serverInstance = cloud.getResourceManager().refreshServerInfo(serverInstance);
-        return serverInstance.getServerDetail().getStatus().equals("running");
+        try {
+            if (cloud == null || cloud.getResourceManager() == null) {
+                log.warn("Cannot check liveness for node {}: cloud reference is null "
+                        + "(transient field lost after Jenkins restart)", getNodeName());
+                return false;
+            }
+            if (serverInstance == null) {
+                log.warn("Cannot check liveness for node {}: serverInstance is null", getNodeName());
+                return false;
+            }
+            serverInstance = cloud.getResourceManager().refreshServerInfo(serverInstance);
+            return serverInstance != null
+                    && serverInstance.getServerDetail() != null
+                    && "running".equals(serverInstance.getServerDetail().getStatus());
+        } catch (Exception e) {
+            log.error("Failed to check liveness for node {}: {}", getNodeName(), e.getMessage(), e);
+            return false;
+        }
     }
 
     @SuppressWarnings("unused")

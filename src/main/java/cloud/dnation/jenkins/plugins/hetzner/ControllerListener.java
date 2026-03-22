@@ -60,7 +60,7 @@ public class ControllerListener extends ComputerListener {
             log.info("Deleting computer {}", computer);
             computer.doDoDelete();
         } catch (IOException e) {
-            log.error("Failed to delete computer", e);
+            log.error("Failed to delete computer '{}'", computer.getName(), e);
         }
     }
 
@@ -69,7 +69,7 @@ public class ControllerListener extends ComputerListener {
             log.info("Terminating Hetzner agent {}", agent.getDisplayName());
             agent.terminate();
         } catch (Exception e) {
-            log.error("Failed to terminate agent", e);
+            log.error("Failed to terminate agent '{}'", agent.getDisplayName(), e);
         }
     }
 }

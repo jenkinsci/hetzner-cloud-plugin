@@ -57,8 +57,15 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
         @Override
         @GuardedBy("hudson.model.Queue.lock")
         public long check(@NonNull final AbstractCloudComputer c) {
-            final HetznerServerAgent agent = (HetznerServerAgent) c.getNode();
-            if (c.isIdle() && agent != null && agent.getServerInstance() != null) {
+            try {
+                if (!(c.getNode() instanceof HetznerServerAgent agent)) {
+                    return 1;
+                }
+                if (!c.isIdle() || agent.getServerInstance() == null
+                        || agent.getServerInstance().getServerDetail() == null
+                        || agent.getServerInstance().getServerDetail().getCreated() == null) {
+                    return 1;
+                }
                 if (Helper.canShutdownServer(agent.getServerInstance().getServerDetail().getCreated(),
                         LocalDateTime.now())) {
                     log.info("Disconnecting {}", c.getName());
@@ -68,6 +75,8 @@ public class BeforeHourWrapsPolicy extends AbstractShutdownPolicy {
                         log.warn("Failed to terminate {}", c.getName(), e);
                     }
                 }
+            } catch (Exception e) {
+                log.warn("Error checking retention for {}: {}", c.getName(), e.getMessage(), e);
             }
             return 1;
         }

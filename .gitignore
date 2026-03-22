@@ -11,3 +11,4 @@ gradlew.bat
 gradlew
 work
 target
+*.hpi
