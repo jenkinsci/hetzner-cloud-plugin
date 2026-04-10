@@ -41,8 +41,16 @@ import java.util.Optional;
 @Slf4j
 public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralNode, TrackedItem {
     @Serial
-    private static final long serialVersionUID = 1;
+    private static final long serialVersionUID = 2;
     private final ProvisioningActivity.Id provisioningId;
+    /**
+     * Persistent cloud name for identifying which cloud owns this agent.
+     * Unlike the transient {@link #cloud} field, this survives Jenkins
+     * restart/deserialization and can be used by {@link OrphanedNodesCleaner}
+     * to scope ghost-node detection to the correct cloud.
+     */
+    @Getter
+    private final String cloudName;
     @Getter
     private final transient HetznerCloud cloud;
     @Getter
@@ -58,6 +66,7 @@ public class HetznerServerAgent extends AbstractCloudSlave implements EphemeralN
             throws IOException, Descriptor.FormException {
         super(name, remoteFS, launcher);
         this.cloud = Objects.requireNonNull(cloud);
+        this.cloudName = cloud.name;
         this.template = Objects.requireNonNull(template);
         this.provisioningId = Objects.requireNonNull(provisioningId);
         setLabelString(template.getLabelStr());

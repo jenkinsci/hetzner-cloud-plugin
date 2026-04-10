@@ -83,10 +83,16 @@ public class OrphanedNodesCleaner extends PeriodicWork {
                     .forEach(serverDetail -> terminateOrphanedServer(serverDetail, cloud));
 
             // Direction 2: Jenkins nodes without VMs (ghost nodes) -- remove them.
-            // Match by node name prefix (hcloud-) rather than transient cloud field,
-            // which is null after deserialization (exactly the scenario ghost nodes
-            // arise from). All Hetzner nodes use the "hcloud-" naming convention.
+            // IMPORTANT: only consider agents that belong to THIS cloud.
+            // Helper.getHetznerAgents() returns agents from ALL Hetzner clouds,
+            // so without filtering, a cloud with 0 VMs would incorrectly remove
+            // every agent from every other cloud as a "ghost node".
+            //
+            // We use the persistent cloudName field (survives deserialization)
+            // to scope the check. Agents created before this field existed will
+            // have cloudName == null; we skip those to avoid false positives.
             hetznerAgents.stream()
+                    .filter(agent -> cloud.name.equals(agent.getCloudName()))
                     .filter(agent -> !hetznerVmNames.contains(agent.getNodeName()))
                     .forEach(agent -> removeGhostNode(agent));
 

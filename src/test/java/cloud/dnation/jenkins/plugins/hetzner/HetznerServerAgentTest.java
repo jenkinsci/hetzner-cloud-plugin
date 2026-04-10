@@ -26,7 +26,9 @@ import java.lang.reflect.Field;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Tests for {@link HetznerServerAgent} exception safety.
@@ -114,5 +116,22 @@ class HetznerServerAgentTest {
         HetznerServerAgent agent = createTestAgent();
         agent.setServerInstance(null);
         assertDoesNotThrow(agent::getDisplayName);
+    }
+
+    // -- cloudName: persistent field for multi-cloud ghost node scoping --
+
+    @Test
+    void cloudNameIsSetFromCloudOnConstruction() throws Exception {
+        HetznerServerAgent agent = createTestAgent();
+        assertEquals("test-cloud", agent.getCloudName());
+    }
+
+    @Test
+    void cloudNameSurvivesWhenTransientCloudFieldIsNull() throws Exception {
+        HetznerServerAgent agent = createTestAgent();
+        setFieldNull(agent, "cloud");
+        assertNull(agent.getCloud());
+        assertEquals("test-cloud", agent.getCloudName(),
+                "cloudName must survive after transient cloud field is nulled (deserialization)");
     }
 }
