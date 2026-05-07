@@ -12,6 +12,7 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.HetznerApi;
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.gson.FieldNamingPolicy;
@@ -118,6 +119,7 @@ class HetznerApiClient {
         if (Instant.now().isAfter(until)) {
             if (blockedUntil.compareAndSet(until, null)) {
                 log.info("Token rate-limit cleared, resuming API calls (credentialsId={})", credentialsId);
+                HetznerMetricProvider.API_RATE_LIMITED.labels(credentialsId).set(0);
             }
             return false;
         }
@@ -135,6 +137,7 @@ class HetznerApiClient {
     void updateRateLimitState(int limit, int remaining) {
         if (limit > 0) {
             this.limit.set(limit);
+            HetznerMetricProvider.API_RATE_LIMIT_LIMIT.labels(credentialsId).set(limit);
         }
         if (remaining >= 0) {
             int prev = this.remaining.getAndSet(remaining);
@@ -144,6 +147,7 @@ class HetznerApiClient {
                 log.warn("Hetzner API quota low: {}/{} remaining (credentialsId={})",
                         remaining, currentLimit, credentialsId);
             }
+            HetznerMetricProvider.API_RATE_LIMIT_REMAINING.labels(credentialsId).set(remaining);
         }
     }
 
@@ -156,10 +160,15 @@ class HetznerApiClient {
                 current == null || fromRetryAfter.isAfter(current) ? fromRetryAfter : current);
         log.warn("Token rate-limited (credentialsId={}). Blocking API calls until {}",
                 credentialsId, blockedUntil.get());
+        HetznerMetricProvider.API_RATE_LIMITED.labels(credentialsId).set(1);
     }
 
     int getRemaining() {
         return remaining.get();
+    }
+
+    String getCredentialsId() {
+        return credentialsId;
     }
 
     /**

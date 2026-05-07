@@ -16,6 +16,7 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.ServerType;
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Uninterruptibles;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -71,9 +72,11 @@ class NodeCallable implements Callable<Node> {
                 HetznerServerTemplate template = rankedTemplates.get(i);
                 String location = template.getLocation();
                 try {
-                    Node result = doProvision(template);
+                    Node result = doProvisionAndTime(template);
                     DcHealthTracker.recordSuccess(location);
                     TemplateErrorTracker.recordSuccess(template.getName());
+                    HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                            cloud.name, template.getName(), "success").inc();
                     return result;
                 } catch (HetznerProvisioningException e) {
                     lastException = e;
@@ -85,6 +88,8 @@ class NodeCallable implements Callable<Node> {
                                 + "(remaining={}, resets in {}s), aborting failover",
                                 agent.getNodeName(), location,
                                 client.getRemaining(), client.timeUntilReset().toSeconds());
+                        HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                cloud.name, template.getName(), "rate_limited").inc();
                         throw e;
                     }
                     if (e.isConfigError()) {
@@ -96,6 +101,8 @@ class NodeCallable implements Callable<Node> {
                                 + "check Hetzner changelog for image deprecation.",
                                 template.getName(), location, e.getMessage(),
                                 e.getHetznerErrorCode(), template.getImage());
+                        HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                cloud.name, template.getName(), "config_error").inc();
                         throw e;
                     }
                     DcHealthTracker.recordFailure(location);
@@ -103,10 +110,24 @@ class NodeCallable implements Callable<Node> {
                         log.warn("DC {} unavailable ({}), trying next DC ({}/{})",
                                 location, e.getHetznerErrorCode(),
                                 i + 1, rankedTemplates.size());
+                        HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                cloud.name, template.getName(), "dc_unavailable").inc();
+                        HetznerMetricProvider.DC_FAILOVER.labels(
+                                location != null ? location : "",
+                                rankedTemplates.get(i + 1).getLocation() != null
+                                        ? rankedTemplates.get(i + 1).getLocation() : "").inc();
                         continue;
                     }
                     // Non-retryable error or last template; give up
+                    HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                            cloud.name, template.getName(), "failure").inc();
                     throw e;
+                } catch (Exception other) {
+                    // Bootstrap / boot / connect / arch failures.
+                    lastException = other;
+                    HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                            cloud.name, template.getName(), "bootstrap_error").inc();
+                    throw other;
                 }
             }
             // Should not reach here, but just in case
@@ -116,6 +137,26 @@ class NodeCallable implements Callable<Node> {
             // Decrement pending counter so subsequent cap checks are accurate.
             // Must run on both success and failure paths.
             cloud.provisionCompleted();
+        }
+    }
+
+    /**
+     * Wrap {@link #doProvision(HetznerServerTemplate)} with a Histogram timer
+     * so per-attempt wall time is observable in Prometheus.
+     * Outcome label is {@code success} or {@code failure}.
+     */
+    private Node doProvisionAndTime(HetznerServerTemplate template) throws Exception {
+        final long startNanos = System.nanoTime();
+        String outcome = "failure";
+        try {
+            Node result = doProvision(template);
+            outcome = "success";
+            return result;
+        } finally {
+            double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            String dc = template.getLocation() != null ? template.getLocation() : "";
+            HetznerMetricProvider.PROVISION_DURATION
+                    .labels(template.getName(), dc, outcome).observe(seconds);
         }
     }
 
@@ -191,9 +232,13 @@ class NodeCallable implements Callable<Node> {
             try {
                 cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
                 log.warn("Destroyed leaked server '{}'", serverName);
+                HetznerMetricProvider.PROVISION_LEAKED_SERVERS
+                        .labels(cloud.name, template.getName()).inc();
             } catch (Exception cleanupEx) {
                 log.error("Failed to destroy leaked server '{}' (id={}), manual cleanup required",
                         serverName, serverInfo.getServerDetail().getId(), cleanupEx);
+                HetznerMetricProvider.PROVISION_LEAK_DESTROY_FAILURES
+                        .labels(cloud.name, template.getName()).inc();
             }
             throw e;
         }
@@ -234,6 +279,12 @@ class NodeCallable implements Callable<Node> {
         String expectedArch = inferArchFromServerType(requestedType);
         String actualArch = inferArchFromServerType(actualType.getName());
         if (!expectedArch.equals(actualArch)) {
+            // Use the parsed arch ({arm64, x86_64}) as the "actual" label
+            // value. The raw server type name (e.g., cax41/cpx62) is bounded
+            // but the parsed arch is more useful for alerting and matches
+            // the hardware-phase label.
+            HetznerMetricProvider.ARCH_VALIDATION_FAILURES
+                    .labels("api", requestedType != null ? requestedType : "", actualArch).inc();
             throw new IllegalStateException(String.format(
                     "Architecture mismatch for server '%s': requested type '%s' (%s) "
                     + "but Hetzner provisioned type '%s' (%s). "
@@ -264,6 +315,12 @@ class NodeCallable implements Callable<Node> {
             String uname = channel.call(new UnameCallable()).trim();
             String hardwareArch = uname.contains("aarch64") || uname.contains("arm") ? "arm64" : "x86_64";
             if (!expectedArch.equals(hardwareArch)) {
+                // Use the parsed arch ({arm64, x86_64}) as the "actual" label
+                // value, NOT the raw `uname` output (which can include kernel
+                // build strings / hostnames -> unbounded cardinality).
+                HetznerMetricProvider.ARCH_VALIDATION_FAILURES
+                        .labels("hardware", requestedType != null ? requestedType : "",
+                                hardwareArch).inc();
                 throw new IllegalStateException(String.format(
                         "Hardware architecture mismatch for server '%s': "
                         + "requested type '%s' (expected %s) but hardware reports '%s' (%s). "

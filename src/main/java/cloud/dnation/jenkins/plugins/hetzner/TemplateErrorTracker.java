@@ -11,6 +11,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -32,6 +33,7 @@ class TemplateErrorTracker {
      * errors, the template is suppressed for SUPPRESSION_MINUTES.
      */
     static void recordError(String templateName, String errorMessage) {
+        HetznerMetricProvider.TEMPLATE_ERRORS.labels(templateName).inc();
         STATES.compute(templateName, (name, state) -> {
             if (state == null) {
                 state = new TemplateState();
@@ -39,10 +41,13 @@ class TemplateErrorTracker {
             state.consecutiveErrors++;
             state.lastError = errorMessage;
             state.lastErrorAt = Instant.now();
+            HetznerMetricProvider.TEMPLATE_CONSECUTIVE_ERRORS.labels(name).set(state.consecutiveErrors);
             if (state.consecutiveErrors >= FAILURE_THRESHOLD && !state.isSuppressed()) {
                 state.suppressedUntil = Instant.now().plusSeconds(SUPPRESSION_MINUTES * 60);
                 log.warn("Template '{}' suppressed for {}m after {} consecutive config errors: {}",
                         name, SUPPRESSION_MINUTES, state.consecutiveErrors, errorMessage);
+                HetznerMetricProvider.TEMPLATE_SUPPRESSED_TOTAL.labels(name).inc();
+                HetznerMetricProvider.TEMPLATE_SUPPRESSED_ACTIVE.labels(name).set(1);
             }
             return state;
         });
@@ -55,6 +60,8 @@ class TemplateErrorTracker {
         TemplateState removed = STATES.remove(templateName);
         if (removed != null && removed.consecutiveErrors > 0) {
             log.info("Template '{}' error state cleared after successful provisioning", templateName);
+            HetznerMetricProvider.TEMPLATE_SUPPRESSED_ACTIVE.labels(templateName).set(0);
+            HetznerMetricProvider.TEMPLATE_CONSECUTIVE_ERRORS.labels(templateName).set(0);
         }
     }
 
@@ -75,6 +82,7 @@ class TemplateErrorTracker {
             // Suppression expired; allow one probe attempt
             log.info("Template '{}' suppression expired, allowing probe attempt", templateName);
             state.suppressedUntil = null;
+            HetznerMetricProvider.TEMPLATE_SUPPRESSED_ACTIVE.labels(templateName).set(0);
             return false;
         }
         return true;

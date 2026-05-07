@@ -12,6 +12,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Interceptor;
@@ -27,7 +28,33 @@ class RateLimitInterceptor implements Interceptor {
 
     @Override
     public Response intercept(Chain chain) throws IOException {
-        Response response = chain.proceed(chain.request());
+        // Defensive: under mockito the apiClient may return null. simpleclient
+        // rejects null label values; coerce to "unknown" so the metric still
+        // records something useful and the request path is unaffected.
+        // (OkHttp's Request.method() is @NonNull -- no guard needed there.)
+        String credIdRaw = apiClient.getCredentialsId();
+        final String credId = credIdRaw != null ? credIdRaw : "unknown";
+        final String method = chain.request().method();
+        final long startNanos = System.nanoTime();
+        Response response;
+        try {
+            response = chain.proceed(chain.request());
+        } catch (IOException networkErr) {
+            // Network-layer failure (DNS, connect, read) before any HTTP
+            // response. Count as a distinct status class so dashboards can
+            // separate "API said no" from "API didn't respond".
+            HetznerMetricProvider.API_REQUESTS
+                    .labels(credId, method, "network_error").inc();
+            double secs = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            HetznerMetricProvider.API_REQUEST_DURATION
+                    .labels(credId, method).observe(secs);
+            throw networkErr;
+        }
+
+        double secs = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+        HetznerMetricProvider.API_REQUEST_DURATION.labels(credId, method).observe(secs);
+        String statusClass = (response.code() / 100) + "xx";
+        HetznerMetricProvider.API_REQUESTS.labels(credId, method, statusClass).inc();
 
         int limit = parseIntHeader(response, "RateLimit-Limit", -1);
         int remaining = parseIntHeader(response, "RateLimit-Remaining", -1);
@@ -37,12 +64,13 @@ class RateLimitInterceptor implements Interceptor {
         if (response.code() == 429) {
             long retryAfter = parseLongHeader(response, "Retry-After", 0);
             log.warn("HTTP 429 on {} {} (remaining={}, retryAfter={}s)",
-                    chain.request().method(), chain.request().url().encodedPath(),
+                    method, chain.request().url().encodedPath(),
                     remaining, retryAfter > 0 ? retryAfter : "default-60");
             apiClient.recordRateLimit(retryAfter > 0 ? retryAfter : 60);
         } else if (response.code() == 401) {
             log.warn("HTTP 401 on {} {} -- token may have been rotated, invalidating client",
-                    chain.request().method(), chain.request().url().encodedPath());
+                    method, chain.request().url().encodedPath());
+            HetznerMetricProvider.API_TOKEN_INVALIDATED.labels(credId).inc();
             apiClient.invalidate();
         }
 

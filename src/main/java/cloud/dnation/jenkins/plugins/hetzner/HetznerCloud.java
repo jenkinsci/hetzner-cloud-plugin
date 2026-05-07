@@ -15,6 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
@@ -114,7 +115,32 @@ public class HetznerCloud extends AbstractCloudImpl {
             template.setCloud(this);
             template.readResolve();
         }
+        publishConfigMetrics();
         return this;
+    }
+
+    /**
+     * Emit info-style gauges describing the cloud's configuration. Called
+     * from {@link #readResolve()} so panels render the topology even before
+     * any provisioning happens.
+     */
+    private void publishConfigMetrics() {
+        HetznerMetricProvider.CLOUD_INFO
+                .labels(name, credentialsId != null ? credentialsId : "").set(1);
+        HetznerMetricProvider.CLOUD_TEMPLATE_COUNT.labels(name).set(serverTemplates.size());
+        HetznerMetricProvider.INSTANCE_CAP.labels(name).set(getInstanceCap());
+        for (HetznerServerTemplate template : serverTemplates) {
+            HetznerMetricProvider.TEMPLATE_INFO.labels(
+                    name,
+                    template.getName() != null ? template.getName() : "",
+                    template.getImage() != null ? template.getImage() : "",
+                    template.getServerType() != null ? template.getServerType() : "",
+                    template.getLocation() != null ? template.getLocation() : ""
+            ).set(1);
+            HetznerMetricProvider.TEMPLATE_EXECUTORS.labels(
+                    name, template.getName() != null ? template.getName() : ""
+            ).set(template.getNumExecutors());
+        }
     }
 
     public HetznerCloudResourceManager getResourceManager() {
@@ -126,10 +152,17 @@ public class HetznerCloud extends AbstractCloudImpl {
 
     @SneakyThrows
     private int runningNodeCount() {
-        return Ints.checkedCast(getResourceManager().fetchAllServers(name)
+        // Note: if fetchAllServers() throws (rate-limit, network blip), the
+        // gauge keeps its last-good value. That's intentional -- a stale
+        // gauge for a few minutes during an outage is more useful than a
+        // gap that breaks alerts. Persistent staleness is detectable as a
+        // flat-line on the dashboard.
+        int count = Ints.checkedCast(getResourceManager().fetchAllServers(name)
                 .stream()
                 .filter(sd -> HetznerConstants.RUNNABLE_STATE_SET.contains(sd.getStatus()))
                 .count());
+        HetznerMetricProvider.RUNNING_SERVERS.labels(name).set(count);
+        return count;
     }
 
     /**
@@ -149,7 +182,9 @@ public class HetznerCloud extends AbstractCloudImpl {
         if (prev <= 0) {
             pendingProvisions.set(0);
             log.warn("pendingProvisions underflow corrected (was {})", prev);
+            HetznerMetricProvider.PROVISION_UNDERFLOW.labels(name).inc();
         }
+        HetznerMetricProvider.PROVISIONING_PENDING.labels(name).set(pendingProvisions.get());
     }
 
     @Override
@@ -165,6 +200,7 @@ public class HetznerCloud extends AbstractCloudImpl {
             while (excessWorkload > 0) {
                 if (jenkinsInstance.isQuietingDown() || jenkinsInstance.isTerminating()) {
                     log.warn("Jenkins is going down, no new nodes will be provisioned");
+                    HetznerMetricProvider.PROVISION_SKIPPED.labels(name, "jenkins_quieting").inc();
                     break;
                 }
                 HetznerApiClient apiClient = HetznerApiClient.forCredentials(credentialsId);
@@ -172,17 +208,22 @@ public class HetznerCloud extends AbstractCloudImpl {
                     log.warn("Hetzner API token rate-limited, suppressing provisioning for cloud '{}' "
                             + "(remaining={}, resets in {}s)",
                             name, apiClient.getRemaining(), apiClient.timeUntilReset().toSeconds());
+                    HetznerMetricProvider.PROVISION_SKIPPED.labels(name, "rate_limited").inc();
                     break;
                 }
                 int running = effectiveNodeCount();
                 int instanceCap = getInstanceCap();
                 int available = instanceCap - running;
+                // INSTANCE_CAP is published from publishConfigMetrics() at
+                // readResolve() -- not on the hot path. Cap doesn't change
+                // between provision() calls, so a per-call set() is wasted work.
                 final List<HetznerServerTemplate> rankedTemplates = rankTemplatesByHealth(matchingTemplates);
                 final HetznerServerTemplate template = rankedTemplates.get(0);
                 if (TemplateErrorTracker.isSuppressed(template.getName())) {
                     log.warn("Template '{}' suppressed due to recurring config errors "
                             + "(image={}). Provisioning skipped; fix template config "
                             + "or check Hetzner changelog.", template.getName(), template.getImage());
+                    HetznerMetricProvider.PROVISION_SKIPPED.labels(name, "template_suppressed").inc();
                     break;
                 }
                 log.info("Creating new agent with {} executors, have {} running VMs "
@@ -192,9 +233,11 @@ public class HetznerCloud extends AbstractCloudImpl {
                     log.warn("Cloud capacity reached ({}). Has {} VMs running+pending, "
                             + "but want {} more executors",
                             instanceCap, running, excessWorkload);
+                    HetznerMetricProvider.PROVISION_SKIPPED.labels(name, "cap_reached").inc();
                     break;
                 } else {
                     pendingProvisions.incrementAndGet();
+                    HetznerMetricProvider.PROVISIONING_PENDING.labels(name).set(pendingProvisions.get());
                     final String serverName = template.generateNodeName();
                     final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
                             serverName);
@@ -213,6 +256,7 @@ public class HetznerCloud extends AbstractCloudImpl {
 
         } catch (Exception e) {
             log.error("Unable to provision node for cloud '{}', label '{}'", name, label, e);
+            HetznerMetricProvider.PROVISION_UNCAUGHT.labels(name).inc();
         }
         return plannedNodes;
     }

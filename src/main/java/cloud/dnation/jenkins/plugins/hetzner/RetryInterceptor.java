@@ -16,6 +16,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Interceptor;
 import okhttp3.Request;
@@ -67,10 +68,17 @@ class RetryInterceptor implements Interceptor {
                 response = chain.proceed(attempt == 0 ? request : request.newBuilder().build());
 
                 if (!isRetryable(response.code()) || attempt == MAX_RETRIES) {
+                    if (isRetryable(response.code()) && attempt == MAX_RETRIES) {
+                        // Retryable code on the LAST attempt -> exhausted
+                        HetznerMetricProvider.API_RETRIES_EXHAUSTED
+                                .labels(credentialsId, "http_" + response.code()).inc();
+                    }
                     return response;
                 }
 
                 // Retryable status code -- calculate backoff
+                HetznerMetricProvider.API_RETRIES
+                        .labels(credentialsId, "http_" + response.code()).inc();
                 long delay = calculateDelay(attempt);
                 log.warn("HTTP {} on {} {} [{}], retrying in {}ms (attempt {}/{})",
                         response.code(),
@@ -83,6 +91,7 @@ class RetryInterceptor implements Interceptor {
                 if (attempt == MAX_RETRIES) {
                     break;
                 }
+                HetznerMetricProvider.API_RETRIES.labels(credentialsId, "timeout").inc();
                 long delay = calculateDelay(attempt);
                 log.warn("Timeout on {} {} [{}], retrying in {}ms (attempt {}/{}): {}",
                         request.method(), request.url().encodedPath(),
@@ -98,6 +107,7 @@ class RetryInterceptor implements Interceptor {
         if (lastException != null) {
             log.error("Exhausted {} retries on {} {} [{}] due to timeouts",
                     MAX_RETRIES, request.method(), request.url().encodedPath(), credentialsId);
+            HetznerMetricProvider.API_RETRIES_EXHAUSTED.labels(credentialsId, "timeout").inc();
             throw lastException;
         }
 

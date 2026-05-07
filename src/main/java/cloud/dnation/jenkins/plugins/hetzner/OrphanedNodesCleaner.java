@@ -16,8 +16,10 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.ServerDetail;
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import hudson.Extension;
 import hudson.model.PeriodicWork;
+import io.prometheus.client.Histogram;
 import jenkins.model.Jenkins;
 import lombok.extern.slf4j.Slf4j;
 import org.jenkinsci.Symbol;
@@ -65,6 +67,8 @@ public class OrphanedNodesCleaner extends PeriodicWork {
             log.warn("Token rate-limited for cloud '{}', skipping orphan cleanup this cycle", cloud.name);
             return;
         }
+        Histogram.Timer cleanupTimer = HetznerMetricProvider.ORPHAN_CLEANUP_DURATION
+                .labels(cloud.name).startTimer();
         try {
             final List<ServerDetail> allInstances = cloud.getResourceManager()
                     .fetchAllServers(cloud.name);
@@ -92,12 +96,16 @@ public class OrphanedNodesCleaner extends PeriodicWork {
             // arise from). All Hetzner nodes use the "hcloud-" naming convention.
             hetznerAgents.stream()
                     .filter(agent -> !hetznerVmNames.contains(agent.getNodeName()))
-                    .forEach(agent -> removeGhostNode(agent));
+                    .forEach(agent -> removeGhostNode(agent, cloud));
 
         } catch (IOException e) {
             log.warn("Error fetching servers from cloud '{}': {}", cloud.name, e.getMessage(), e);
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "fetch_servers").inc();
         } catch (Exception e) {
             log.error("Unexpected error cleaning cloud '{}': {}", cloud.name, e.getMessage(), e);
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "unexpected").inc();
+        } finally {
+            cleanupTimer.observeDuration();
         }
     }
 
@@ -106,9 +114,11 @@ public class OrphanedNodesCleaner extends PeriodicWork {
                 serverDetail.getName(), serverDetail.getId(), cloud.name);
         try {
             cloud.getResourceManager().destroyServer(serverDetail);
+            HetznerMetricProvider.ORPHAN_REAPED.labels(cloud.name).inc();
         } catch (Exception e) {
             log.error("Failed to terminate orphaned server {} (id={}) from cloud '{}': {}",
                     serverDetail.getName(), serverDetail.getId(), cloud.name, e.getMessage(), e);
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "destroy_server").inc();
         }
     }
 
@@ -130,7 +140,7 @@ public class OrphanedNodesCleaner extends PeriodicWork {
         }
     }
 
-    private static void removeGhostNode(HetznerServerAgent agent) {
+    private static void removeGhostNode(HetznerServerAgent agent, HetznerCloud cloud) {
         String name = agent.getNodeName();
         var computer = agent.toComputer();
         if (computer != null && !computer.isOffline()) {
@@ -141,8 +151,10 @@ public class OrphanedNodesCleaner extends PeriodicWork {
         log.info("Removing ghost node {} (Jenkins node without Hetzner VM)", name);
         try {
             Jenkins.get().removeNode(agent);
+            HetznerMetricProvider.GHOST_REMOVED.labels(cloud.name).inc();
         } catch (Exception e) {
             log.error("Failed to remove ghost node {}: {}", name, e.getMessage(), e);
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "remove_node").inc();
         }
     }
 }
