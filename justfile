@@ -127,21 +127,44 @@ verify-failover inst:
     echo "    jenkins job -i {{inst}} delete verify-failover-\$l"
     echo "  done"
 
-# Create a GitHub release and tag
+# Create a GitHub release and tag.
+#
+# Idempotent: re-running after a partial failure skips the steps that already
+# succeeded (e.g. if the tag pushed but `gh release create` failed because of
+# a remote-detection bug, you can re-run without "tag already exists" errors).
+#
+# `--repo` is pinned to the Percona fork so `gh` does not pick up the
+# `upstream` remote (jenkinsci/hetzner-cloud-plugin). Without the pin, gh
+# tries to create the release in the upstream repo and fails on auth /
+# tag-on-different-fork.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
     tag="v{{version}}"
     hpi="hetzner-cloud-{{version}}.hpi"
+    fork_repo="nogueiraanderson/hetzner-cloud-plugin"
     if [[ ! -f "$hpi" ]]; then
         echo "HPI not found. Run: just build"
         exit 1
     fi
-    git tag -s "$tag" -m "Release {{version}}"
-    git push origin "$tag"
-    gh release create "$tag" "$hpi" \
-        --title "{{version}}" \
-        --notes "Hetzner Cloud Plugin {{version}} (Percona patched)"
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        echo "Tag $tag already exists locally, skipping git tag"
+    else
+        git tag -s "$tag" -m "Release {{version}}"
+    fi
+    if git ls-remote --tags origin "$tag" 2>/dev/null | grep -q "$tag"; then
+        echo "Tag $tag already on origin, skipping push"
+    else
+        git push origin "$tag"
+    fi
+    if gh release view "$tag" --repo "$fork_repo" >/dev/null 2>&1; then
+        echo "Release $tag already exists on $fork_repo, uploading asset only"
+        gh release upload "$tag" "$hpi" --repo "$fork_repo" --clobber
+    else
+        gh release create "$tag" "$hpi" --repo "$fork_repo" \
+            --title "{{version}}" \
+            --notes "Hetzner Cloud Plugin {{version}} (Percona patched)"
+    fi
     echo "Released $tag with $hpi"
 
 # Clean build artifacts and cache
