@@ -173,15 +173,22 @@
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>cloud-stats</artifactId>
         </dependency>
-        <!-- Pulls in simpleclient (0.16.0) via the prometheus-plugin's shared
-             classloader. We register metrics with CollectorRegistry.defaultRegistry,
-             which the plugin's /prometheus endpoint scrapes verbatim. Hard
-             dependency: PS-10997 makes prometheus-plugin a runtime requirement
-             of this fork (already installed on every Percona Jenkins master). -->
+        <!-- Self-contained Prometheus instrumentation (PS-10997). We bundle
+             simpleclient + simpleclient_common directly so the plugin works on
+             ANY Jenkins master without a sibling prometheus-plugin install.
+             Metrics are exposed at /hetzner-prometheus by HetznerPrometheusEndpoint
+             (gated by Jenkins.SYSTEM_READ). The earlier design assumed
+             prometheus-plugin was already installed fleet-wide; the audit on
+             2026-05-07 found 0/10 Percona masters had it. -->
         <dependency>
-            <groupId>org.jenkins-ci.plugins</groupId>
-            <artifactId>prometheus</artifactId>
-            <version>852.v317db_5d17a_b_0</version>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_common</artifactId>
+            <version>0.16.0</version>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
