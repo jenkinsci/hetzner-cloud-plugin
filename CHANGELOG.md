@@ -2,6 +2,18 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.10 (2026-05-07)
+
+Drop SYSTEM_READ permission gate on `/hetzner-prometheus` for the push-model rollout.
+
+### Changed
+- `HetznerPrometheusEndpoint.doIndex()` no longer calls `Jenkins.get().checkPermission(Jenkins.SYSTEM_READ)`. The endpoint is unreachable from external clients (Jenkins binds 8080 to 127.0.0.1 on Percona masters); the master-side Grafana Alloy systemd unit is the only consumer. Auth lives at the in-cluster `alloy-gateway` (NGINX bearer-token sidecar + ALB inbound-CIDRs allowlist), not at the Jenkins endpoint.
+- Javadoc updated to reflect the localhost-only contract and reference ADR 0013 / PS-10997 Phase 2.
+
+### Context
+- Companion repo: `nogueiraanderson/percona-ci-platform` (alloy-gateway addon).
+- Supersedes the prior plan that ran a `prom-scraper-svc` Jenkins user with API-token basic auth for in-cluster Prometheus to scrape this endpoint over public DNS.
+
 ## v103.percona.5 (2026-04-01)
 
 Retry infrastructure and template error suppression.

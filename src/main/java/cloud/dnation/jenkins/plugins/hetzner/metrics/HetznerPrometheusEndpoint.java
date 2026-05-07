@@ -31,11 +31,12 @@ import java.io.Writer;
  * the endpoint works on any Jenkins master, including those that have not
  * installed the Jenkins community Prometheus plugin.
  *
- * Access requires {@link Jenkins#SYSTEM_READ} so an unauthenticated client
- * cannot harvest cloud / template / credentials_id labels. The
- * kube-prometheus-stack scrape job authenticates as the {@code prom-scraper}
- * Jenkins user (Phase 2 of PS-10997 -- see {@code resources/addons/prometheus/}
- * in percona-ci-platform).
+ * Localhost-only endpoint. Jenkins binds 8080 to 127.0.0.1 on Percona
+ * masters, so this endpoint is unreachable from external clients. The
+ * master-side Grafana Alloy systemd unit scrapes it and forwards to the
+ * in-cluster alloy-gateway over a bearer-authenticated outbound HTTPS
+ * connection (PS-10997 Phase 2, ADR 0013). No SYSTEM_READ permission gate
+ * is enforced because no remote scraper exists in the push model.
  */
 @Extension
 public class HetznerPrometheusEndpoint implements RootAction {
@@ -66,7 +67,6 @@ public class HetznerPrometheusEndpoint implements RootAction {
      * {@link CollectorRegistry#defaultRegistry}.
      */
     public void doIndex(@NonNull StaplerRequest2 req, @NonNull StaplerResponse2 rsp) throws IOException {
-        Jenkins.get().checkPermission(Jenkins.SYSTEM_READ);
         rsp.setContentType(TextFormat.CONTENT_TYPE_004);
         rsp.setStatus(200);
         try (Writer writer = rsp.getWriter()) {
