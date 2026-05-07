@@ -45,13 +45,14 @@ result=$(jenkins admin -i "$inst" groovy -e "$groovy_script" 2>&1 \
     | python3 -c "import json,sys; print(json.load(sys.stdin).get('message','FAIL'))" 2>/dev/null || echo "FAIL")
 echo "  $result"
 
-# Smart restart
+# Smart restart. Quiet-down is banned (blocks new builds + queues a
+# surprise restart that lands mid-shift). For busy masters we leave the
+# .jpi.pinned in place and wait for the next natural JVM restart.
 busy=$(jenkins admin -i "$inst" executors -r 2>&1 | tail -n +2 | wc -l)
 if [[ "$busy" -eq 0 ]]; then
     echo "  Idle. Force restarting..."
     jenkins admin -i "$inst" restart --force 2>/dev/null || true
 else
-    echo "  $busy busy executors. Enabling quiet-down..."
-    jenkins admin -i "$inst" restart --quiet-down 2>/dev/null || true
+    echo "  $busy busy executors. Pin-only; .jpi.pinned waits for next JVM restart."
 fi
 echo ""
