@@ -12,10 +12,9 @@ package cloud.dnation.jenkins.plugins.hetzner.metrics;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.Extension;
-import hudson.model.RootAction;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
-import jenkins.model.Jenkins;
+import hudson.model.UnprotectedRootAction;
 import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.StaplerResponse2;
 
@@ -35,11 +34,13 @@ import java.io.Writer;
  * masters, so this endpoint is unreachable from external clients. The
  * master-side Grafana Alloy systemd unit scrapes it and forwards to the
  * in-cluster alloy-gateway over a bearer-authenticated outbound HTTPS
- * connection (PS-10997 Phase 2, ADR 0013). No SYSTEM_READ permission gate
- * is enforced because no remote scraper exists in the push model.
+ * connection (PS-10997 Phase 2, ADR 0013). The endpoint implements
+ * {@link UnprotectedRootAction} so Jenkins core's authorization layer
+ * does not require {@code Jenkins.READ} for anonymous local callers; the
+ * push-model trust boundary is the loopback bind, not core ACLs.
  */
 @Extension
-public class HetznerPrometheusEndpoint implements RootAction {
+public class HetznerPrometheusEndpoint implements UnprotectedRootAction {
 
     private static final String URL_NAME = "hetzner-prometheus";
 

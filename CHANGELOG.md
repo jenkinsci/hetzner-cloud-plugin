@@ -2,6 +2,17 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.11 (2026-05-08)
+
+Make `/hetzner-prometheus` an `UnprotectedRootAction` so anonymous loopback callers are not blocked by Jenkins core authorization.
+
+### Changed
+- `HetznerPrometheusEndpoint` now `implements UnprotectedRootAction` (instead of `RootAction`). v103.percona.10 dropped the `Jenkins.SYSTEM_READ` check inside `doIndex()`, but the request was still rejected with HTTP 403 by `GlobalMatrixAuthorizationStrategy` before ever reaching `doIndex()`. Verified anonymous `curl http://127.0.0.1:8080/hetzner-prometheus` returned 403 on ps3.cd with v103.percona.10 active.
+- Javadoc updated to reflect that the trust boundary is the Jenkins 8080 loopback bind, not core ACLs.
+
+### Context
+- Required for ADR 0013's master-side Alloy push model (PS-10997 Phase 2). The Alloy systemd unit on each EC2 master scrapes the endpoint with no credentials; auth lives at the in-cluster `alloy-gateway` instead.
+
 ## v103.percona.10 (2026-05-07)
 
 Drop SYSTEM_READ permission gate on `/hetzner-prometheus` for the push-model rollout.
