@@ -18,9 +18,29 @@
 
 Forked from [jenkinsci/hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) v103 with robustness, rate-limiting, retry, and DC failover patches.
 
-Current version: **v103.percona.5** (17 commits ahead of upstream).
+Current version: **v103.percona.11**.
+
+For older releases (v103.percona.1 through v103.percona.8), see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Percona patches
+
+### v103.percona.11: Anonymous loopback metrics endpoint
+
+`HetznerPrometheusEndpoint` now `implements UnprotectedRootAction` instead of `RootAction`. v10 dropped the `Jenkins.SYSTEM_READ` check inside `doIndex`, but `GlobalMatrixAuthorizationStrategy` still rejected anonymous loopback callers with HTTP 403 before `doIndex` was reached. v11 makes the endpoint anonymous-readable so the master-side Grafana Alloy systemd unit can scrape `http://127.0.0.1:8080/hetzner-prometheus/` with no credentials. The trust boundary is the Jenkins 8080 loopback bind, not core ACLs. Required for ADR 0013 push-model rollout (PS-10997 Phase 2).
+
+### v103.percona.10: Drop SYSTEM_READ gate inside doIndex
+
+Removed the `Jenkins.get().checkPermission(Jenkins.SYSTEM_READ)` call inside `HetznerPrometheusEndpoint.doIndex()`. Necessary but not sufficient (see v11): the core authorization filter still gated anonymous callers. Kept for completeness; v11 supersedes.
+
+### v103.percona.9: Self-contained `/hetzner-prometheus` endpoint
+
+Stapler `RootAction` at `/hetzner-prometheus` exposes 40 `hetzner_*` metric families (DC circuit breaker state, provisioning latency, API rate-limit headroom, CRW iterations, template suppression, anomaly counters) in Prometheus 0.0.4 text format. Bundles `io.prometheus:simpleclient` directly, so the plugin does not depend on the Jenkins community `prometheus-plugin` (a fleet audit found 0/10 masters had it installed). PS-10997 Phase 1.
+
+| Component | Purpose |
+|-----------|---------|
+| `HetznerPrometheusEndpoint` | Stapler `RootAction` serving Prometheus 0.0.4 text format |
+| `HetznerMetricProvider` | Registers all `hetzner_*` collectors against `CollectorRegistry.defaultRegistry` |
+| `BundledSimpleClientPusher` | Single source for plugin-instrumentation metrics |
 
 ### v103.percona.5: Retry and template error suppression
 
