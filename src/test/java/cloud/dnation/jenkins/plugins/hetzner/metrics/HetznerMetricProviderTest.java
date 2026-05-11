@@ -40,6 +40,74 @@ class HetznerMetricProviderTest {
         assertEquals(3.0, sample("hetzner_provisioning_pending", "cloud", "test-cloud"));
     }
 
+    /**
+     * Lock down the authoritative outcome enumeration. Every value emitted on
+     * {@link HetznerMetricProvider#PROVISION_ATTEMPTS} MUST be one of the
+     * constants exposed on the provider so dashboards/alerting rules can be
+     * cross-checked against this single source. Post-merge CV2 finding: prior
+     * to this commit four production outcomes were undocumented.
+     */
+    @Test
+    void provisionOutcomesEnumerationIsExhaustive() {
+        // Constants and the set must agree.
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_SUCCESS));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_RATE_LIMITED));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_UNCLASSIFIED_THROTTLE));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_CONFIG_ERROR));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_CAP_REACHED_UNDER_LOCK));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_FAILOVER_INCOMPATIBLE));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_DC_UNAVAILABLE));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_DC_ATTRIBUTABLE));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_FAILURE));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_BOOTSTRAP_IO));
+        assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES
+                .contains(HetznerMetricProvider.OUTCOME_BOOTSTRAP_OTHER));
+        // 11 attempt outcomes; OUTCOME_PRECHECK_FAILURE lives on the duration
+        // histogram only, not on PROVISION_ATTEMPTS.
+        assertEquals(11, HetznerMetricProvider.ALL_PROVISION_OUTCOMES.size());
+    }
+
+    @Test
+    void precheckOutcomesAreASubsetOfAllOutcomes() {
+        // Every precheck outcome (rerouted onto PROVISION_DURATION as
+        // outcome=precheck_failure) must also be a valid PROVISION_ATTEMPTS
+        // outcome so dashboards relating the two metrics stay consistent.
+        for (String o : HetznerMetricProvider.PRECHECK_OUTCOMES) {
+            assertTrue(HetznerMetricProvider.ALL_PROVISION_OUTCOMES.contains(o),
+                    "precheck outcome " + o + " is not in ALL_PROVISION_OUTCOMES");
+        }
+        // OUTCOME_PRECHECK_FAILURE itself is distinct -- only the histogram
+        // observes it, never the attempts counter.
+        assertEquals("precheck_failure", HetznerMetricProvider.OUTCOME_PRECHECK_FAILURE);
+    }
+
+    @Test
+    void orphanCleanupKindEnumerationIsExhaustive() {
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_FETCH_SERVERS));
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_DESTROY_SERVER));
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_DESTROY_FAILED));
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_REMOVE_NODE));
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_RATE_LIMITED));
+        assertTrue(HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS
+                .contains(HetznerMetricProvider.ORPHAN_KIND_UNEXPECTED));
+        assertEquals(6, HetznerMetricProvider.ALL_ORPHAN_CLEANUP_KINDS.size());
+    }
+
     @Test
     void runningServersGaugeReflectsSetCalls() {
         HetznerMetricProvider.RUNNING_SERVERS.labels("test-cloud").set(7);

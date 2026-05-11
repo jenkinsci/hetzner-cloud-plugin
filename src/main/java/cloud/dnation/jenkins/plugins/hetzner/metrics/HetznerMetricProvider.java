@@ -110,20 +110,119 @@ public final class HetznerMetricProvider {
             .register();
 
     /**
-     * Per-attempt outcome. {@code outcome} is one of: {@code success},
-     * {@code rate_limited}, {@code config_error}, {@code dc_unavailable},
-     * {@code failure}, {@code bootstrap_error}.
+     * Per-attempt outcome. Use one of the {@code OUTCOME_*} constants below as
+     * the {@code outcome} label; the full enumeration is documented there.
+     * Centralizing the values protects dashboards from silently drifting when
+     * a new branch is added in NodeCallable.
      *
      * Bootstrap-phase breakdown (boot timeout vs. SSH connect vs. arch
-     * mismatch vs. addNode failure) is NOT split here -- tracked as
-     * follow-up PS-10997-B because it requires NodeCallable.doProvision()
-     * refactor. For now {@code bootstrap_error} is a single bucket.
+     * mismatch vs. addNode failure) is split here: {@link #OUTCOME_BOOTSTRAP_IO}
+     * is recorded when the launcher / SSH path failed (DC-attributable, used
+     * for breaker tracking via {@code DcHealthTracker.recordFailure}), and
+     * {@link #OUTCOME_BOOTSTRAP_OTHER} is recorded for non-IO bootstrap
+     * failures (arch mismatch, addNode failure, runtime). Refining further
+     * (e.g. a separate {@code bootstrap_addnode} bucket) is tracked as
+     * follow-up.
      */
     public static final Counter PROVISION_ATTEMPTS = Counter.build()
             .name("hetzner_provision_attempts_total")
             .help("Per-attempt provisioning outcomes (one observation per template tried)")
             .labelNames("cloud", "template", "outcome")
             .register();
+
+    /**
+     * Authoritative set of {@code outcome} label values emitted on
+     * {@link #PROVISION_ATTEMPTS}. Every call site uses one of these constants;
+     * a new outcome must be added here so dashboards and alerting rules can
+     * be updated atomically.
+     */
+    public static final String OUTCOME_SUCCESS = "success";
+    /** Hetzner returned HTTP 429 with code {@code rate_limit_exceeded}. */
+    public static final String OUTCOME_RATE_LIMITED = "rate_limited";
+    /**
+     * Hetzner returned HTTP 429 with an unclassified code (neither
+     * {@code rate_limit_exceeded} nor our synthetic {@code instance_cap_reached}).
+     * Treated as a token throttle for routing; surfaced as its own outcome so
+     * unknown 429 codes do not silently merge with real rate-limit events.
+     */
+    public static final String OUTCOME_UNCLASSIFIED_THROTTLE = "unclassified_throttle";
+    /** Template-scoped config error (bad image, malformed selector, etc). */
+    public static final String OUTCOME_CONFIG_ERROR = "config_error";
+    /**
+     * Plugin-synthesized HTTP 429 with code {@code instance_cap_reached},
+     * raised by the under-lock cap recheck in HetznerCloudResourceManager.
+     * Not a DC health signal; treated as cloud cap bookkeeping.
+     */
+    public static final String OUTCOME_CAP_REACHED_UNDER_LOCK = "cap_reached_under_lock";
+    /**
+     * Next ranked template was not failover-compatible with the agent's
+     * baseline template (different connector / credentials / labels /
+     * executors / connection method). Treated as a final failure to avoid
+     * wrong-metadata bootstraps.
+     */
+    public static final String OUTCOME_FAILOVER_INCOMPATIBLE = "failover_incompatible";
+    /** Hetzner returned {@code resource_unavailable} for this DC. */
+    public static final String OUTCOME_DC_UNAVAILABLE = "dc_unavailable";
+    /**
+     * Other plausibly-DC-attributable failure (unknown 422, 5xx). Recorded
+     * as a soft DC failure for breaker tracking; failed over to the next DC
+     * if available.
+     */
+    public static final String OUTCOME_DC_ATTRIBUTABLE = "dc_attributable";
+    /** Non-retryable Hetzner failure or last template attempt. */
+    public static final String OUTCOME_FAILURE = "failure";
+    /**
+     * Post-create launcher / SSH / remoting failure. Recorded as a soft DC
+     * bootstrap failure so chronic DC-scoped launcher rot trips the breaker.
+     */
+    public static final String OUTCOME_BOOTSTRAP_IO = "bootstrap_io";
+    /**
+     * Post-create non-IO bootstrap failure (arch mismatch, addNode failure,
+     * unexpected runtime). NOT recorded as a DC failure.
+     */
+    public static final String OUTCOME_BOOTSTRAP_OTHER = "bootstrap_other";
+
+    /**
+     * Pre-check / precheck failure: an outcome that exited before any real
+     * boot work was performed. Used only on {@link #PROVISION_DURATION} so
+     * boot-duration p50/p95 dashboards are not skewed by millisecond-elapsed
+     * failures (rate-limit, cap-reached, config-error, etc).
+     */
+    public static final String OUTCOME_PRECHECK_FAILURE = "precheck_failure";
+
+    /**
+     * Set of {@link #PROVISION_ATTEMPTS} outcomes that exited before any real
+     * boot work was attempted. {@link #PROVISION_DURATION} maps these to
+     * {@link #OUTCOME_PRECHECK_FAILURE} instead of the generic
+     * {@link #OUTCOME_FAILURE} so boot-duration percentile dashboards are
+     * not polluted by these millisecond-elapsed failures.
+     */
+    public static final java.util.Set<String> PRECHECK_OUTCOMES = java.util.Set.of(
+            OUTCOME_RATE_LIMITED,
+            OUTCOME_UNCLASSIFIED_THROTTLE,
+            OUTCOME_CONFIG_ERROR,
+            OUTCOME_CAP_REACHED_UNDER_LOCK,
+            OUTCOME_FAILOVER_INCOMPATIBLE
+    );
+
+    /**
+     * Authoritative enumeration of {@link #PROVISION_ATTEMPTS} outcomes.
+     * Tests assert that every emit site uses a value from this set;
+     * dashboards / alerting rules should be cross-checked against it.
+     */
+    public static final java.util.Set<String> ALL_PROVISION_OUTCOMES = java.util.Set.of(
+            OUTCOME_SUCCESS,
+            OUTCOME_RATE_LIMITED,
+            OUTCOME_UNCLASSIFIED_THROTTLE,
+            OUTCOME_CONFIG_ERROR,
+            OUTCOME_CAP_REACHED_UNDER_LOCK,
+            OUTCOME_FAILOVER_INCOMPATIBLE,
+            OUTCOME_DC_UNAVAILABLE,
+            OUTCOME_DC_ATTRIBUTABLE,
+            OUTCOME_FAILURE,
+            OUTCOME_BOOTSTRAP_IO,
+            OUTCOME_BOOTSTRAP_OTHER
+    );
 
     /**
      * Provisioning short-circuited before submitting a NodeCallable.
@@ -209,6 +308,26 @@ public final class HetznerMetricProvider {
             .help("Errors raised during orphan/ghost cleanup")
             .labelNames("cloud", "kind")
             .register();
+
+    /**
+     * Authoritative set of {@code kind} label values on
+     * {@link #ORPHAN_CLEANUP_ERRORS}.
+     */
+    public static final String ORPHAN_KIND_FETCH_SERVERS = "fetch_servers";
+    public static final String ORPHAN_KIND_DESTROY_SERVER = "destroy_server";
+    public static final String ORPHAN_KIND_DESTROY_FAILED = "destroy_failed";
+    public static final String ORPHAN_KIND_REMOVE_NODE = "remove_node";
+    public static final String ORPHAN_KIND_RATE_LIMITED = "rate_limited";
+    public static final String ORPHAN_KIND_UNEXPECTED = "unexpected";
+
+    public static final java.util.Set<String> ALL_ORPHAN_CLEANUP_KINDS = java.util.Set.of(
+            ORPHAN_KIND_FETCH_SERVERS,
+            ORPHAN_KIND_DESTROY_SERVER,
+            ORPHAN_KIND_DESTROY_FAILED,
+            ORPHAN_KIND_REMOVE_NODE,
+            ORPHAN_KIND_RATE_LIMITED,
+            ORPHAN_KIND_UNEXPECTED
+    );
 
     /**
      * Wall time of one OrphanedNodesCleaner pass per cloud. Buckets cover the

@@ -117,7 +117,11 @@ class NodeCallableRetryTest {
         when(agent.getTemplate()).thenReturn(t1);
         when(agent.getComputer()).thenReturn(null);
 
-        // Auth error: should NOT retry
+        // Auth error: should NOT retry and should NOT record a DC failure.
+        // Authentication outages are token-scoped, not DC-scoped; recording a
+        // DC failure here poisons the breaker for healthy DCs. Codex post-merge
+        // review H2: previously DcHealthTracker.recordFailure ran before the
+        // isPlausiblyDcAttributable gate.
         when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("Unauthorized", 401, "unauthorized", "fsn1"));
 
@@ -126,9 +130,64 @@ class NodeCallableRetryTest {
 
         HetznerProvisioningException ex = assertThrows(HetznerProvisioningException.class, callable::call);
         assertEquals(401, ex.getHttpStatus());
-        // fsn1 failure recorded, but nbg1 should NOT have been tried
-        assertEquals(1, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
+        // Auth error is not DC-attributable; neither breaker should move.
+        assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
         assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
+        // And no failover attempt should have been issued.
+        verify(mgr, times(1)).createServer(any(), any());
+    }
+
+    /**
+     * Regression: a 403 forbidden from Hetzner is also not DC-attributable;
+     * neither breaker should move. Same shape as {@link #noRetryOnAuthError()}.
+     */
+    @Test
+    void noBreakerPoisonOnForbidden() throws Exception {
+        HetznerServerTemplate t1 = makeTemplate("t1", "fsn1");
+        HetznerServerTemplate t2 = makeTemplate("t2", "nbg1");
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-cred", "10",
+                Lists.newArrayList(t1, t2));
+
+        HetznerServerAgent agent = mock(HetznerServerAgent.class);
+        when(agent.getTemplate()).thenReturn(t1);
+        when(agent.getComputer()).thenReturn(null);
+
+        when(mgr.createServer(any(), any())).thenThrow(
+                new HetznerProvisioningException("Forbidden", 403, "forbidden", "fsn1"));
+
+        NodeCallable callable = new NodeCallable(agent, cloud, List.of(t1, t2));
+        assertThrows(HetznerProvisioningException.class, callable::call);
+        assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
+        assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
+        verify(mgr, times(1)).createServer(any(), any());
+    }
+
+    /**
+     * Regression: a 404 not_found is also not DC-attributable; neither breaker
+     * should move. Common cause: deleted SSH key, removed network, stale
+     * placement group.
+     */
+    @Test
+    void noBreakerPoisonOnNotFound() throws Exception {
+        HetznerServerTemplate t1 = makeTemplate("t1", "fsn1");
+        HetznerServerTemplate t2 = makeTemplate("t2", "nbg1");
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-cred", "10",
+                Lists.newArrayList(t1, t2));
+
+        HetznerServerAgent agent = mock(HetznerServerAgent.class);
+        when(agent.getTemplate()).thenReturn(t1);
+        when(agent.getComputer()).thenReturn(null);
+
+        when(mgr.createServer(any(), any())).thenThrow(
+                new HetznerProvisioningException("Not found", 404, "not_found", "fsn1"));
+
+        NodeCallable callable = new NodeCallable(agent, cloud, List.of(t1, t2));
+        assertThrows(HetznerProvisioningException.class, callable::call);
+        assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
+        assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
+        verify(mgr, times(1)).createServer(any(), any());
     }
 
     @Test

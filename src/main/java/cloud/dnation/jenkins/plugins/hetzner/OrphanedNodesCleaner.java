@@ -65,6 +65,11 @@ public class OrphanedNodesCleaner extends PeriodicWork {
     private static void cleanCloud(HetznerCloud cloud) {
         if (HetznerApiClient.forCredentials(cloud.getCredentialsId()).isRateLimited()) {
             log.warn("Token rate-limited for cloud '{}', skipping orphan cleanup this cycle", cloud.name);
+            // Surface the throttle on the same dashboard panel that monitors
+            // cleanup health, so "cleanup stuck" alerts fire on this path
+            // instead of silently showing zero. Opus post-merge LC5.
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                    .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_RATE_LIMITED).inc();
             return;
         }
         Histogram.Timer cleanupTimer = HetznerMetricProvider.ORPHAN_CLEANUP_DURATION
@@ -100,10 +105,12 @@ public class OrphanedNodesCleaner extends PeriodicWork {
 
         } catch (IOException e) {
             log.warn("Error fetching servers from cloud '{}': {}", cloud.name, e.getMessage(), e);
-            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "fetch_servers").inc();
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                    .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_FETCH_SERVERS).inc();
         } catch (Exception e) {
             log.error("Unexpected error cleaning cloud '{}': {}", cloud.name, e.getMessage(), e);
-            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "unexpected").inc();
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                    .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_UNEXPECTED).inc();
         } finally {
             cleanupTimer.observeDuration();
         }
@@ -123,12 +130,14 @@ public class OrphanedNodesCleaner extends PeriodicWork {
                 log.warn("Orphan termination failed for server {} (id={}, cloud={}); "
                         + "will retry on next cycle",
                         serverDetail.getName(), serverDetail.getId(), cloud.name);
-                HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "destroy_failed").inc();
+                HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                        .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_DESTROY_FAILED).inc();
             }
         } catch (Exception e) {
             log.error("Failed to terminate orphaned server {} (id={}) from cloud '{}': {}",
                     serverDetail.getName(), serverDetail.getId(), cloud.name, e.getMessage(), e);
-            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "destroy_server").inc();
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                    .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_DESTROY_SERVER).inc();
         }
     }
 
@@ -164,7 +173,8 @@ public class OrphanedNodesCleaner extends PeriodicWork {
             HetznerMetricProvider.GHOST_REMOVED.labels(cloud.name).inc();
         } catch (Exception e) {
             log.error("Failed to remove ghost node {}: {}", name, e.getMessage(), e);
-            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "remove_node").inc();
+            HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS
+                    .labels(cloud.name, HetznerMetricProvider.ORPHAN_KIND_REMOVE_NODE).inc();
         }
     }
 }

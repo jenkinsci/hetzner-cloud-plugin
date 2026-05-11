@@ -76,23 +76,27 @@ class NodeCallable implements Callable<Node> {
                     DcHealthTracker.recordSuccess(location);
                     TemplateErrorTracker.recordSuccess(template.getName());
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                            cloud.name, template.getName(), "success").inc();
+                            cloud.name, template.getName(),
+                            HetznerMetricProvider.OUTCOME_SUCCESS).inc();
                     return result;
                 } catch (HetznerProvisioningException e) {
                     lastException = e;
+                    final String nodeName = agent.getNodeName();
                     if (e.isRateLimited()) {
                         // Rate limit is token-scoped, not DC-scoped. All DCs share
                         // the same token; retrying another DC just wastes quota.
-                        // isRateLimited() now requires BOTH HTTP 429 AND code
+                        // isRateLimited() requires BOTH HTTP 429 AND code
                         // "rate_limit_exceeded" so instance_cap_reached (also 429)
                         // no longer false-aborts failover.
                         HetznerApiClient client = HetznerApiClient.forCredentials(cloud.getCredentialsId());
-                        log.warn("Token rate-limited during provisioning of '{}' in DC {} "
-                                + "(cloud={}, template={}, remaining={}, resets in {}s), aborting failover",
-                                agent.getNodeName(), location, cloud.name, template.getName(),
+                        log.warn("Token rate-limited during provisioning "
+                                + "(cloud={}, template={}, dc={}, node={}, "
+                                + "remaining={}, resets in {}s); aborting failover",
+                                cloud.name, template.getName(), location, nodeName,
                                 client.getRemaining(), client.timeUntilReset().toSeconds());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "rate_limited").inc();
+                                cloud.name, template.getName(),
+                                HetznerMetricProvider.OUTCOME_RATE_LIMITED).inc();
                         throw e;
                     }
                     // Bare HTTP 429 with no/unrecognized error code: Hetzner
@@ -101,26 +105,29 @@ class NodeCallable implements Callable<Node> {
                     // cause of 429) rather than recording a DC failure.
                     if (e.getHttpStatus() == 429
                             && !"instance_cap_reached".equals(e.getHetznerErrorCode())) {
-                        log.warn("Unclassified HTTP 429 from Hetzner during provisioning of '{}' "
-                                + "(cloud={}, template={}, dc={}, code={}); treating as token "
-                                + "throttle, aborting failover",
-                                agent.getNodeName(), cloud.name, template.getName(), location,
+                        log.warn("Unclassified HTTP 429 from Hetzner during provisioning "
+                                + "(cloud={}, template={}, dc={}, node={}, code={}); "
+                                + "treating as token throttle, aborting failover",
+                                cloud.name, template.getName(), location, nodeName,
                                 e.getHetznerErrorCode());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "unclassified_throttle").inc();
+                                cloud.name, template.getName(),
+                                HetznerMetricProvider.OUTCOME_UNCLASSIFIED_THROTTLE).inc();
                         throw e;
                     }
                     if (e.isConfigError()) {
                         // Config errors are template-scoped, not DC-scoped.
                         // Trying another DC with the same bad image/config won't help.
                         TemplateErrorTracker.recordError(template.getName(), e.getMessage());
-                        log.error("Template '{}' config error in DC {}: {} "
-                                + "(code={}, image={}). DC failover skipped; "
-                                + "check Hetzner changelog for image deprecation.",
-                                template.getName(), location, e.getMessage(),
-                                e.getHetznerErrorCode(), template.getImage());
+                        log.error("Template config error -- DC failover skipped; "
+                                + "check Hetzner changelog for image deprecation "
+                                + "(cloud={}, template={}, dc={}, node={}, image={}, "
+                                + "code={}, msg={})",
+                                cloud.name, template.getName(), location, nodeName,
+                                template.getImage(), e.getHetznerErrorCode(), e.getMessage());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "config_error").inc();
+                                cloud.name, template.getName(),
+                                HetznerMetricProvider.OUTCOME_CONFIG_ERROR).inc();
                         throw e;
                     }
                     if ("instance_cap_reached".equals(e.getHetznerErrorCode())) {
@@ -130,52 +137,78 @@ class NodeCallable implements Callable<Node> {
                         // DC will hit the same cloud-wide cap. Skip DC failure
                         // recording so capacity bursts don't poison healthy DCs.
                         log.warn("Cloud cap reached during burst provisioning "
-                                + "(cloud={}, template={}, dc={}, node={}); skipping DC health "
-                                + "record and failover",
-                                cloud.name, template.getName(), location, agent.getNodeName());
+                                + "(cloud={}, template={}, dc={}, node={}); "
+                                + "skipping DC health record and failover",
+                                cloud.name, template.getName(), location, nodeName);
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "cap_reached_under_lock").inc();
+                                cloud.name, template.getName(),
+                                HetznerMetricProvider.OUTCOME_CAP_REACHED_UNDER_LOCK).inc();
                         throw e;
                     }
-                    DcHealthTracker.recordFailure(location);
-                    // Failover decision uses isPlausiblyDcAttributable() not the strict
-                    // isResourceUnavailable() check. Hetzner introduces new error codes
-                    // regularly; an unknown 422 or any 5xx is plausibly a DC issue and
-                    // worth one retry on another DC before surfacing the failure.
-                    //
-                    // Additionally gate on isFailoverCompatibleWith(): the agent was
-                    // built from the FIRST ranked template, so swapping to a template
-                    // with different labels / connector / executors / remoteFs would
-                    // create a server whose Jenkins-side metadata is wrong (wrong SSH
-                    // credentials, wrong workspace, wrong queue matcher). When the next
-                    // template is incompatible we treat this as a final failure rather
-                    // than chasing more wrong-metadata bootstraps.
-                    if (e.isPlausiblyDcAttributable() && i < rankedTemplates.size() - 1) {
-                        HetznerServerTemplate next = rankedTemplates.get(i + 1);
-                        HetznerServerTemplate baseline = agent.getTemplate();
-                        if (baseline != null && !baseline.isFailoverCompatibleWith(next)) {
-                            log.warn("DC failover from {} to {} aborted: template '{}' is not "
-                                    + "failover-compatible with '{}' (differs on labels/executors/"
-                                    + "remoteFs/mode/connector). Treating as final failure.",
-                                    location, next.getLocation(), baseline.getName(), next.getName());
+                    // Now categorize by whether this is DC-attributable. Auth /
+                    // not-found / forbidden / unknown-client are NOT DC-scoped;
+                    // recording them in DcHealthTracker would poison the breaker
+                    // on credential outages or client misconfiguration. Codex
+                    // post-merge review H2: previously recordFailure(location)
+                    // ran unconditionally before this gate.
+                    if (e.isPlausiblyDcAttributable()) {
+                        DcHealthTracker.recordFailure(location);
+                        final String dcOutcome = e.isResourceUnavailable()
+                                ? HetznerMetricProvider.OUTCOME_DC_UNAVAILABLE
+                                : HetznerMetricProvider.OUTCOME_DC_ATTRIBUTABLE;
+
+                        // Failover gate: a compatible neighbour template lets us
+                        // retry on another DC. The agent was built from the FIRST
+                        // ranked template, so swapping to a template with different
+                        // labels / connector / executors / remoteFs creates a
+                        // server whose Jenkins-side metadata is wrong (wrong SSH
+                        // credentials, wrong workspace, wrong queue matcher).
+                        if (i < rankedTemplates.size() - 1) {
+                            HetznerServerTemplate next = rankedTemplates.get(i + 1);
+                            HetznerServerTemplate baseline = agent.getTemplate();
+                            if (baseline != null && !baseline.isFailoverCompatibleWith(next)) {
+                                log.warn("DC failover aborted -- next template is not "
+                                        + "failover-compatible (differs on labels / executors / "
+                                        + "remoteFs / mode / connector / connectionMethod) "
+                                        + "(cloud={}, template={}, dc={}, node={}, "
+                                        + "next_template={}, next_dc={}); "
+                                        + "treating as final failure",
+                                        cloud.name, baseline.getName(), location, nodeName,
+                                        next.getName(), next.getLocation());
+                                HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                        cloud.name, template.getName(),
+                                        HetznerMetricProvider.OUTCOME_FAILOVER_INCOMPATIBLE).inc();
+                                throw e;
+                            }
+                            log.warn("DC-attributable failure -- trying next DC "
+                                    + "(cloud={}, template={}, dc={}, node={}, "
+                                    + "status={}, code={}, attempt={}/{}, next_dc={})",
+                                    cloud.name, template.getName(), location, nodeName,
+                                    e.getHttpStatus(), e.getHetznerErrorCode(),
+                                    i + 1, rankedTemplates.size(), next.getLocation());
                             HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                    cloud.name, template.getName(), "failover_incompatible").inc();
-                            throw e;
+                                    cloud.name, template.getName(), dcOutcome).inc();
+                            HetznerMetricProvider.DC_FAILOVER.labels(
+                                    location != null ? location : "",
+                                    next.getLocation() != null ? next.getLocation() : "").inc();
+                            continue;
                         }
-                        String outcomeLabel = e.isResourceUnavailable() ? "dc_unavailable" : "dc_attributable";
-                        log.warn("DC {} attributable failure ({}/{}), trying next DC ({}/{})",
-                                location, e.getHttpStatus(), e.getHetznerErrorCode(),
-                                i + 1, rankedTemplates.size());
+                        // Last template; DC outcome is still the right label.
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), outcomeLabel).inc();
-                        HetznerMetricProvider.DC_FAILOVER.labels(
-                                location != null ? location : "",
-                                next.getLocation() != null ? next.getLocation() : "").inc();
-                        continue;
+                                cloud.name, template.getName(), dcOutcome).inc();
+                        throw e;
                     }
-                    // Non-retryable error or last template; give up
+                    // Non-DC-attributable error (auth / not-found / unknown client).
+                    // Do NOT call DcHealthTracker.recordFailure; the breaker only
+                    // tracks DC-scoped issues.
+                    log.warn("Non-DC-attributable Hetzner failure -- aborting "
+                            + "(cloud={}, template={}, dc={}, node={}, "
+                            + "status={}, code={}, msg={})",
+                            cloud.name, template.getName(), location, nodeName,
+                            e.getHttpStatus(), e.getHetznerErrorCode(), e.getMessage());
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                            cloud.name, template.getName(), "failure").inc();
+                            cloud.name, template.getName(),
+                            HetznerMetricProvider.OUTCOME_FAILURE).inc();
                     throw e;
                 } catch (java.io.IOException ioe) {
                     // Launcher / SSH / remoting failures during the post-create
@@ -187,7 +220,8 @@ class NodeCallable implements Callable<Node> {
                     lastException = ioe;
                     DcHealthTracker.recordFailure(location);
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                            cloud.name, template.getName(), "bootstrap_error").inc();
+                            cloud.name, template.getName(),
+                            HetznerMetricProvider.OUTCOME_BOOTSTRAP_IO).inc();
                     throw ioe;
                 } catch (Exception other) {
                     // Non-IO bootstrap failures: arch mismatch, addNode failure,
@@ -195,7 +229,8 @@ class NodeCallable implements Callable<Node> {
                     // typically Jenkins-side or config issues, not DC health.
                     lastException = other;
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                            cloud.name, template.getName(), "bootstrap_error").inc();
+                            cloud.name, template.getName(),
+                            HetznerMetricProvider.OUTCOME_BOOTSTRAP_OTHER).inc();
                     throw other;
                 }
             }
@@ -212,15 +247,35 @@ class NodeCallable implements Callable<Node> {
     /**
      * Wrap {@link #doProvision(HetznerServerTemplate)} with a Histogram timer
      * so per-attempt wall time is observable in Prometheus.
-     * Outcome label is {@code success} or {@code failure}.
+     *
+     * Outcome label is one of:
+     * <ul>
+     *   <li>{@link HetznerMetricProvider#OUTCOME_SUCCESS} -- VM created and
+     *       bootstrap completed.</li>
+     *   <li>{@link HetznerMetricProvider#OUTCOME_PRECHECK_FAILURE} -- exited
+     *       before any real boot work (Hetzner API rejected the create_server
+     *       request or the under-lock cap recheck synthesized an error). Wall
+     *       time is the API roundtrip, not the boot duration; split out so
+     *       p50/p95 boot-duration dashboards are not skewed during throttle
+     *       bursts. Opus post-merge review H1.</li>
+     *   <li>{@link HetznerMetricProvider#OUTCOME_FAILURE} -- bootstrap was
+     *       attempted (VM created, boot polled, maybe SSH'd) and failed.</li>
+     * </ul>
      */
     private Node doProvisionAndTime(HetznerServerTemplate template) throws Exception {
         final long startNanos = System.nanoTime();
-        String outcome = "failure";
+        String outcome = HetznerMetricProvider.OUTCOME_FAILURE;
         try {
             Node result = doProvision(template);
-            outcome = "success";
+            outcome = HetznerMetricProvider.OUTCOME_SUCCESS;
             return result;
+        } catch (HetznerProvisioningException e) {
+            // The Hetzner API rejected the create_server request, or our own
+            // under-lock cap recheck synthesized an error. No bootstrap work
+            // was performed; record as precheck rather than mixing with real
+            // boot durations.
+            outcome = HetznerMetricProvider.OUTCOME_PRECHECK_FAILURE;
+            throw e;
         } finally {
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             String dc = template.getLocation() != null ? template.getLocation() : "";
@@ -345,28 +400,34 @@ class NodeCallable implements Callable<Node> {
             // WARN, not ERROR: a single bootstrap failure is a recoverable
             // event (we destroy the VM, the autoscaler will replace). ERROR
             // is reserved for cases where cleanup also failed and an operator
-            // needs to act. Codex review R2 logging finding.
-            log.warn("Failed to bootstrap server '{}' (id={}, cloud={}, template={}, dc={}); "
-                    + "attempting cleanup. Cause: {}",
-                    serverName, serverInfo.getServerDetail().getId(),
+            // needs to act. Codex review R2 logging finding. The full
+            // exception (including stack) is passed as the trailing SLF4J
+            // argument so the launcher's underlying cause is preserved in
+            // logs even when this is the last catch on the path. Codex
+            // post-merge review CV4 / L3.
+            final String agentNodeName = agent.getNodeName();
+            log.warn("Failed to bootstrap server -- attempting cleanup "
+                    + "(cloud={}, template={}, dc={}, node={}, server_id={})",
                     cloud.name, template.getName(), template.getLocation(),
-                    e.getMessage());
+                    agentNodeName, serverInfo.getServerDetail().getId(), e);
             // destroyServer returns boolean: true on confirmed delete, false if
             // the underlying API call swallowed an exception. Branch metrics on
             // the actual outcome so PROVISION_LEAKED_SERVERS no longer over-
             // reports successful cleanups when Hetzner rejected the delete.
             boolean destroyed = cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
             if (destroyed) {
-                log.warn("Destroyed leaked server '{}' (id={}, cloud={}, template={}, dc={})",
-                        serverName, serverInfo.getServerDetail().getId(),
-                        cloud.name, template.getName(), template.getLocation());
+                log.warn("Destroyed leaked server "
+                        + "(cloud={}, template={}, dc={}, node={}, server_id={})",
+                        cloud.name, template.getName(), template.getLocation(),
+                        agentNodeName, serverInfo.getServerDetail().getId());
                 HetznerMetricProvider.PROVISION_LEAKED_SERVERS
                         .labels(cloud.name, template.getName()).inc();
             } else {
-                log.error("Failed to destroy leaked server '{}' (id={}, cloud={}, template={}, dc={}); "
-                        + "manual cleanup required (OrphanedNodesCleaner will retry)",
-                        serverName, serverInfo.getServerDetail().getId(),
-                        cloud.name, template.getName(), template.getLocation());
+                log.error("Failed to destroy leaked server -- manual cleanup required "
+                        + "(OrphanedNodesCleaner will retry) "
+                        + "(cloud={}, template={}, dc={}, node={}, server_id={})",
+                        cloud.name, template.getName(), template.getLocation(),
+                        agentNodeName, serverInfo.getServerDetail().getId());
                 HetznerMetricProvider.PROVISION_LEAK_DESTROY_FAILURES
                         .labels(cloud.name, template.getName()).inc();
             }
@@ -376,21 +437,40 @@ class NodeCallable implements Callable<Node> {
             // Also belt-and-suspenders: lookup by node name even when our flag
             // says it wasn't added, because addNode() can mutate Jenkins state
             // and then throw partway through save (Opus review M4).
-            String nodeName = agent.getNodeName();
             boolean shouldTryRemove = nodeAddedToJenkins
-                    || (nodeName != null && Jenkins.get().getNode(nodeName) != null);
+                    || (agentNodeName != null && Jenkins.get().getNode(agentNodeName) != null);
             if (shouldTryRemove) {
                 try {
                     // Re-resolve via Jenkins.getNode in case our `agent` reference
                     // has been swapped or invalidated; tolerates already-removed.
-                    hudson.model.Node existing = Jenkins.get().getNode(nodeName);
-                    if (existing != null) {
+                    // Identity check: only remove if it's still OUR agent (Opus
+                    // post-merge M4: a heavily concurrent provisioning burst on a
+                    // JCasC-managed instance could in principle race a same-name
+                    // agent into existence; we should not delete someone else's
+                    // node, even if collisions are astronomically unlikely given
+                    // the random suffix).
+                    hudson.model.Node existing = Jenkins.get().getNode(agentNodeName);
+                    if (existing != null && existing == agent) {
                         Jenkins.get().removeNode(existing);
-                        log.warn("Removed Jenkins node '{}' after bootstrap failure", nodeName);
+                        log.warn("Removed Jenkins node after bootstrap failure "
+                                + "(cloud={}, template={}, dc={}, node={})",
+                                cloud.name, template.getName(), template.getLocation(),
+                                agentNodeName);
+                    } else if (existing != null) {
+                        log.warn("Skipping ghost-node removal: node with our name "
+                                + "exists but is a different agent instance "
+                                + "(cloud={}, template={}, node={})",
+                                cloud.name, template.getName(), agentNodeName);
                     }
                 } catch (Exception removeEx) {
-                    log.error("Failed to remove ghost Jenkins node '{}' after bootstrap failure; "
-                            + "manual cleanup may be required", nodeName, removeEx);
+                    // WARN rather than ERROR: the most common cause is a race
+                    // where another path already removed the node. ERROR is
+                    // reserved for confirmed cleanup failure where an operator
+                    // must act.
+                    log.warn("Could not remove Jenkins node after bootstrap failure "
+                            + "(cloud={}, template={}, node={}): {}",
+                            cloud.name, template.getName(), agentNodeName,
+                            removeEx.getMessage(), removeEx);
                 }
             }
             throw e;
