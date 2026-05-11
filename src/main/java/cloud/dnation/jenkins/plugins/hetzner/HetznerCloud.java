@@ -238,19 +238,34 @@ public class HetznerCloud extends AbstractCloudImpl {
                 } else {
                     pendingProvisions.incrementAndGet();
                     HetznerMetricProvider.PROVISIONING_PENDING.labels(name).set(pendingProvisions.get());
-                    final String serverName = template.generateNodeName();
-                    final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
-                            serverName);
-                    final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
-                    agent.setMode(template.getMode());
-                    plannedNodes.add(new TrackedPlannedNode(
-                                    provisioningId,
-                                    agent.getNumExecutors(),
-                                    Computer.threadPoolForRemoting.submit(
-                                            new NodeCallable(agent, this, rankedTemplates))
-                            )
-                    );
-                    excessWorkload -= agent.getNumExecutors();
+                    // Anything between incrementAndGet() and a successful submit can
+                    // leak the increment (template.createAgent throws, the executor
+                    // rejects with RejectedExecutionException at shutdown, etc.).
+                    // Decrement on any non-submission failure path so cap accounting
+                    // does not drift across the lifetime of the JVM.
+                    boolean submitted = false;
+                    try {
+                        final String serverName = template.generateNodeName();
+                        final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
+                                serverName);
+                        final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
+                        agent.setMode(template.getMode());
+                        plannedNodes.add(new TrackedPlannedNode(
+                                        provisioningId,
+                                        agent.getNumExecutors(),
+                                        Computer.threadPoolForRemoting.submit(
+                                                new NodeCallable(agent, this, rankedTemplates))
+                                )
+                        );
+                        submitted = true;
+                        excessWorkload -= agent.getNumExecutors();
+                    } finally {
+                        if (!submitted) {
+                            // NodeCallable.call() will never run, so its finally
+                            // block can't restore pendingProvisions. Do it here.
+                            provisionCompleted();
+                        }
+                    }
                 }
             }
 

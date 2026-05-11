@@ -15,11 +15,14 @@ import hudson.Extension;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import hudson.model.UnprotectedRootAction;
+import lombok.extern.slf4j.Slf4j;
 import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.StaplerResponse2;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 /**
  * Stapler endpoint that exposes {@link HetznerMetricProvider}'s metrics at
@@ -40,9 +43,19 @@ import java.io.Writer;
  * push-model trust boundary is the loopback bind, not core ACLs.
  */
 @Extension
+@Slf4j
 public class HetznerPrometheusEndpoint implements UnprotectedRootAction {
 
     private static final String URL_NAME = "hetzner-prometheus";
+
+    /**
+     * If {@code true}, only loopback callers are served. Default {@code true}.
+     * Can be overridden by JVM property {@code hetzner.prometheus.allowNonLoopback=true}
+     * for environments that proxy via a trusted reverse proxy (e.g. unix socket).
+     * Documented escape hatch; not recommended.
+     */
+    private static final boolean ALLOW_NON_LOOPBACK =
+            Boolean.getBoolean("hetzner.prometheus.allowNonLoopback");
 
     @Override
     @Nullable
@@ -66,12 +79,44 @@ public class HetznerPrometheusEndpoint implements UnprotectedRootAction {
     /**
      * GET /hetzner-prometheus -- emit text-format metrics from
      * {@link CollectorRegistry#defaultRegistry}.
+     *
+     * Enforces loopback origin to avoid leaking cloud/template/credential-id
+     * topology to anyone who happens to reach Jenkins 8080 (CDN bypass,
+     * misconfigured reverse proxy, etc.). The UnprotectedRootAction marker
+     * removed Jenkins core's anonymous-deny gate; this check restores a
+     * narrower one based on the request peer address.
      */
     public void doIndex(@NonNull StaplerRequest2 req, @NonNull StaplerResponse2 rsp) throws IOException {
+        if (!ALLOW_NON_LOOPBACK && !isLoopbackRequest(req)) {
+            log.warn("Refusing /hetzner-prometheus from non-loopback peer '{}' (remoteAddr='{}')",
+                    req.getRemoteHost(), req.getRemoteAddr());
+            rsp.sendError(403, "metrics endpoint is loopback-only");
+            return;
+        }
         rsp.setContentType(TextFormat.CONTENT_TYPE_004);
         rsp.setStatus(200);
         try (Writer writer = rsp.getWriter()) {
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples());
+        }
+    }
+
+    /**
+     * Returns true iff the request's remote address is a loopback IP.
+     * Uses {@link StaplerRequest2#getRemoteAddr()} which Stapler populates from
+     * the underlying servlet container. Behind a reverse proxy this is the
+     * proxy's address, so loopback-with-frontend-proxy works; X-Forwarded-For
+     * spoofing is irrelevant because we ignore that header.
+     */
+    private static boolean isLoopbackRequest(StaplerRequest2 req) {
+        String remoteAddr = req.getRemoteAddr();
+        if (remoteAddr == null || remoteAddr.isEmpty()) {
+            return false;
+        }
+        try {
+            return InetAddress.getByName(remoteAddr).isLoopbackAddress();
+        } catch (UnknownHostException e) {
+            log.warn("Could not parse remote address '{}'; treating as non-loopback", remoteAddr);
+            return false;
         }
     }
 }

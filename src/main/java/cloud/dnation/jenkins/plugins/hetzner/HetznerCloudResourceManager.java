@@ -260,8 +260,12 @@ public class HetznerCloudResourceManager {
      * Destroy server.
      *
      * @param server server instance to remove from cloud
+     * @return {@code true} if the server was successfully deleted, {@code false} otherwise.
+     *         Callers should branch on the return value to distinguish real cleanup from
+     *         silently-swallowed failures; the internal try/catch is required to protect
+     *         periodic-timer callers, so exceptions never propagate up.
      */
-    public void destroyServer(ServerDetail server) {
+    public boolean destroyServer(ServerDetail server) {
         final long serverId = server.getId();
         final HetznerApi client = proxy();
         try {
@@ -312,6 +316,7 @@ public class HetznerCloudResourceManager {
             log.info("Server with ID = {} successfully deleted", serverId);
             SERVER_LIST_CACHE.invalidateAll();
             log.debug("Server list cache invalidated after destroyServer (id={})", serverId);
+            return true;
         } catch (Exception e) {
             // Catch ALL exceptions (IOException, IllegalStateException from
             // assertValidResponse on HTTP 429/412, and any other RuntimeException).
@@ -323,6 +328,7 @@ public class HetznerCloudResourceManager {
             log.error("Unable to destroy server with ID = {} (name={}). "
                     + "Server may become orphaned and will be retried by OrphanedNodesCleaner.",
                     serverId, server.getName(), e);
+            return false;
         }
     }
 

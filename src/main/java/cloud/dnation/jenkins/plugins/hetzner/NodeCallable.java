@@ -83,6 +83,9 @@ class NodeCallable implements Callable<Node> {
                     if (e.isRateLimited()) {
                         // Rate limit is token-scoped, not DC-scoped. All DCs share
                         // the same token; retrying another DC just wastes quota.
+                        // isRateLimited() now requires BOTH HTTP 429 AND code
+                        // "rate_limit_exceeded" so instance_cap_reached (also 429)
+                        // no longer false-aborts failover.
                         HetznerApiClient client = HetznerApiClient.forCredentials(cloud.getCredentialsId());
                         log.warn("Token rate-limited during provisioning of '{}' in DC {} "
                                 + "(remaining={}, resets in {}s), aborting failover",
@@ -106,12 +109,17 @@ class NodeCallable implements Callable<Node> {
                         throw e;
                     }
                     DcHealthTracker.recordFailure(location);
-                    if (e.isResourceUnavailable() && i < rankedTemplates.size() - 1) {
-                        log.warn("DC {} unavailable ({}), trying next DC ({}/{})",
-                                location, e.getHetznerErrorCode(),
+                    // Failover decision uses isPlausiblyDcAttributable() not the strict
+                    // isResourceUnavailable() check. Hetzner introduces new error codes
+                    // regularly; an unknown 422 or any 5xx is plausibly a DC issue and
+                    // worth one retry on another DC before surfacing the failure.
+                    if (e.isPlausiblyDcAttributable() && i < rankedTemplates.size() - 1) {
+                        String outcomeLabel = e.isResourceUnavailable() ? "dc_unavailable" : "dc_attributable";
+                        log.warn("DC {} attributable failure ({}/{}), trying next DC ({}/{})",
+                                location, e.getHttpStatus(), e.getHetznerErrorCode(),
                                 i + 1, rankedTemplates.size());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "dc_unavailable").inc();
+                                cloud.name, template.getName(), outcomeLabel).inc();
                         HetznerMetricProvider.DC_FAILOVER.labels(
                                 location != null ? location : "",
                                 rankedTemplates.get(i + 1).getLocation() != null
@@ -122,8 +130,22 @@ class NodeCallable implements Callable<Node> {
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
                             cloud.name, template.getName(), "failure").inc();
                     throw e;
+                } catch (java.io.IOException ioe) {
+                    // Launcher / SSH / remoting failures during the post-create
+                    // bootstrap phase. These can be one-off (slow sshd boot) OR
+                    // DC-level (network blip, DC-scoped firewall/ssh outage). We
+                    // record a soft DC failure so chronic DC-level launcher rot
+                    // can trip the breaker over time, while a single slow boot
+                    // doesn't (threshold is 2 consecutive).
+                    lastException = ioe;
+                    DcHealthTracker.recordFailure(location);
+                    HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                            cloud.name, template.getName(), "bootstrap_error").inc();
+                    throw ioe;
                 } catch (Exception other) {
-                    // Bootstrap / boot / connect / arch failures.
+                    // Non-IO bootstrap failures: arch mismatch, addNode failure,
+                    // unexpected runtime. NOT recorded as DC failure - these are
+                    // typically Jenkins-side or config issues, not DC health.
                     lastException = other;
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
                             cloud.name, template.getName(), "bootstrap_error").inc();
@@ -169,6 +191,9 @@ class NodeCallable implements Callable<Node> {
     private Node doProvision(HetznerServerTemplate template) throws Exception {
         final HetznerServerInfo serverInfo = cloud.getResourceManager().createServer(agent);
         final String serverName = serverInfo.getServerDetail().getName();
+        // Track Jenkins-side state for cleanup: a ghost node would block queue
+        // routing if we destroyed the Hetzner server but left the Node entry.
+        boolean nodeAddedToJenkins = false;
         try {
             agent.setServerInstance(serverInfo);
             boolean running = false;
@@ -199,11 +224,21 @@ class NodeCallable implements Callable<Node> {
                     serverInfo.getServerDetail().getServerType(), serverName);
 
             Jenkins.get().addNode(agent);
+            nodeAddedToJenkins = true;
             Computer computer = agent.toComputer();
             int retry = 5;
             boolean connected = false;
             if (computer != null) {
                 while (--retry > 0) {
+                    // Respect the per-attempt boot deadline so we don't keep retrying
+                    // SSH connect indefinitely after the launcher has already burnt
+                    // through the launcher-side retry budget. Without this, a wrong-arch
+                    // or sshd-never-up VM costs an extra ~50s before destroy.
+                    if (waitStrategy.isDeadLineOver()) {
+                        log.warn("Connection to '{}' aborted: boot deadline exceeded "
+                                + "(remaining retries {})", computer.getDisplayName(), retry);
+                        break;
+                    }
                     try {
                         computer.connect(false).get();
                         connected = true;
@@ -229,16 +264,33 @@ class NodeCallable implements Callable<Node> {
             return agent;
         } catch (Exception e) {
             log.error("Failed to bootstrap server '{}', attempting cleanup", serverName, e);
-            try {
-                cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
+            // destroyServer returns boolean: true on confirmed delete, false if
+            // the underlying API call swallowed an exception. Branch metrics on
+            // the actual outcome so PROVISION_LEAKED_SERVERS no longer over-
+            // reports successful cleanups when Hetzner rejected the delete.
+            boolean destroyed = cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
+            if (destroyed) {
                 log.warn("Destroyed leaked server '{}'", serverName);
                 HetznerMetricProvider.PROVISION_LEAKED_SERVERS
                         .labels(cloud.name, template.getName()).inc();
-            } catch (Exception cleanupEx) {
-                log.error("Failed to destroy leaked server '{}' (id={}), manual cleanup required",
-                        serverName, serverInfo.getServerDetail().getId(), cleanupEx);
+            } else {
+                log.error("Failed to destroy leaked server '{}' (id={}), manual cleanup required "
+                        + "(OrphanedNodesCleaner will retry)",
+                        serverName, serverInfo.getServerDetail().getId());
                 HetznerMetricProvider.PROVISION_LEAK_DESTROY_FAILURES
                         .labels(cloud.name, template.getName()).inc();
+            }
+            // Ghost-node prevention: addNode() may have succeeded before connect/
+            // hardware-validation failed. If so, remove the Jenkins Node so it
+            // doesn't sit around offline blocking queue routing for its labels.
+            if (nodeAddedToJenkins) {
+                try {
+                    Jenkins.get().removeNode(agent);
+                    log.warn("Removed Jenkins node '{}' after bootstrap failure", agent.getNodeName());
+                } catch (Exception removeEx) {
+                    log.error("Failed to remove ghost Jenkins node '{}' after bootstrap failure; "
+                            + "manual cleanup may be required", agent.getNodeName(), removeEx);
+                }
             }
             throw e;
         }
@@ -246,21 +298,37 @@ class NodeCallable implements Callable<Node> {
 
     /**
      * Infer expected CPU architecture from Hetzner server type name.
-     * CAX series (cax11, cax21, cax31, cax41) = ARM64 (Ampere Altra).
-     * All others (cx, cpx, ccx, cx, etc.) = x86_64 (Intel/AMD).
-     *
-     * Limitation: relies on Hetzner naming convention. If Hetzner introduces
-     * new ARM server type prefixes (e.g., "aax*"), this method will
-     * incorrectly classify them as x86_64. The post-boot uname check
-     * (Option C) serves as the safety net for this case.
+     * Known ARM prefixes: cax (Ampere Altra). Known x86_64 prefixes: cx, cpx, ccx.
+     * Anything else logs a WARNING and defaults to x86_64 so the post-boot uname
+     * check (Option C) can still catch real mismatches without forcing a hard
+     * failure here. Hetzner introduces new server-type families regularly; the
+     * warning surfaces unknown prefixes in logs for an operator to add to the
+     * known-set explicitly.
      *
      * @param serverType Hetzner server type name (e.g., "cax41", "cpx62")
      * @return "arm64" or "x86_64"
      */
+    private static final java.util.Set<String> KNOWN_ARM_PREFIXES = java.util.Set.of("cax");
+    private static final java.util.Set<String> KNOWN_X86_PREFIXES = java.util.Set.of("cx", "cpx", "ccx");
+
     static String inferArchFromServerType(String serverType) {
-        if (serverType != null && serverType.toLowerCase(Locale.ROOT).startsWith("cax")) {
-            return "arm64";
+        if (serverType == null || serverType.isEmpty()) {
+            return "x86_64";
         }
+        String lower = serverType.toLowerCase(Locale.ROOT);
+        for (String p : KNOWN_ARM_PREFIXES) {
+            if (lower.startsWith(p)) {
+                return "arm64";
+            }
+        }
+        for (String p : KNOWN_X86_PREFIXES) {
+            if (lower.startsWith(p)) {
+                return "x86_64";
+            }
+        }
+        log.warn("Unknown Hetzner server type prefix '{}' - defaulting to x86_64. "
+                + "If this is an ARM family, update KNOWN_ARM_PREFIXES; the post-boot "
+                + "uname check is the safety net for now.", serverType);
         return "x86_64";
     }
 
@@ -312,8 +380,21 @@ class NodeCallable implements Callable<Node> {
                 return;
             }
             // uname -m returns: x86_64, aarch64, armv7l, etc.
+            // Use exact normalized match instead of substring "arm" - the substring
+            // form matches armv7l (32-bit ARM) and would also false-match any kernel
+            // build string or path that happens to contain "arm".
             String uname = channel.call(new UnameCallable()).trim();
-            String hardwareArch = uname.contains("aarch64") || uname.contains("arm") ? "arm64" : "x86_64";
+            String unameLower = uname.toLowerCase(Locale.ROOT);
+            String hardwareArch;
+            if ("aarch64".equals(unameLower) || "arm64".equals(unameLower)) {
+                hardwareArch = "arm64";
+            } else if ("x86_64".equals(unameLower) || "amd64".equals(unameLower)) {
+                hardwareArch = "x86_64";
+            } else {
+                log.warn("Unrecognized 'uname -m' output '{}' on server '{}'; treating as x86_64 "
+                        + "for compatibility. Verify the hardware architecture manually.", uname, serverName);
+                hardwareArch = "x86_64";
+            }
             if (!expectedArch.equals(hardwareArch)) {
                 // Use the parsed arch ({arm64, x86_64}) as the "actual" label
                 // value, NOT the raw `uname` output (which can include kernel

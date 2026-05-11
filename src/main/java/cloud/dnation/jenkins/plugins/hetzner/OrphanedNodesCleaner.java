@@ -113,8 +113,17 @@ public class OrphanedNodesCleaner extends PeriodicWork {
         log.info("Terminating orphaned server {} (id={}) from cloud '{}'",
                 serverDetail.getName(), serverDetail.getId(), cloud.name);
         try {
-            cloud.getResourceManager().destroyServer(serverDetail);
-            HetznerMetricProvider.ORPHAN_REAPED.labels(cloud.name).inc();
+            // destroyServer returns false when its internal try/catch swallowed
+            // an exception (rate-limit, HTTP 5xx, etc.). Bumping ORPHAN_REAPED
+            // unconditionally falsely reports recovery while servers stay alive.
+            boolean reaped = cloud.getResourceManager().destroyServer(serverDetail);
+            if (reaped) {
+                HetznerMetricProvider.ORPHAN_REAPED.labels(cloud.name).inc();
+            } else {
+                log.warn("Orphan termination failed for server {} (id={}); will retry on next cycle",
+                        serverDetail.getName(), serverDetail.getId());
+                HetznerMetricProvider.ORPHAN_CLEANUP_ERRORS.labels(cloud.name, "destroy_failed").inc();
+            }
         } catch (Exception e) {
             log.error("Failed to terminate orphaned server {} (id={}) from cloud '{}': {}",
                     serverDetail.getName(), serverDetail.getId(), cloud.name, e.getMessage(), e);
