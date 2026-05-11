@@ -260,8 +260,12 @@ public class HetznerCloudResourceManager {
      * Destroy server.
      *
      * @param server server instance to remove from cloud
+     * @return {@code true} if the server was successfully deleted, {@code false} otherwise.
+     *         Callers should branch on the return value to distinguish real cleanup from
+     *         silently-swallowed failures; the internal try/catch is required to protect
+     *         periodic-timer callers, so exceptions never propagate up.
      */
-    public void destroyServer(ServerDetail server) {
+    public boolean destroyServer(ServerDetail server) {
         final long serverId = server.getId();
         final HetznerApi client = proxy();
         try {
@@ -312,6 +316,7 @@ public class HetznerCloudResourceManager {
             log.info("Server with ID = {} successfully deleted", serverId);
             SERVER_LIST_CACHE.invalidateAll();
             log.debug("Server list cache invalidated after destroyServer (id={})", serverId);
+            return true;
         } catch (Exception e) {
             // Catch ALL exceptions (IOException, IllegalStateException from
             // assertValidResponse on HTTP 429/412, and any other RuntimeException).
@@ -323,6 +328,7 @@ public class HetznerCloudResourceManager {
             log.error("Unable to destroy server with ID = {} (name={}). "
                     + "Server may become orphaned and will be retried by OrphanedNodesCleaner.",
                     serverId, server.getName(), e);
+            return false;
         }
     }
 
@@ -443,6 +449,21 @@ public class HetznerCloudResourceManager {
      * @return instance of {@link CreateServerResponse}
      */
     public HetznerServerInfo createServer(HetznerServerAgent agent) {
+        // Backward-compatible delegate: use the agent's own template. NodeCallable's
+        // DC failover loop must call the (agent, template) overload to actually
+        // try a different template/DC per iteration; otherwise the iteration is
+        // cosmetic because the agent's template is final.
+        return createServer(agent, agent.getTemplate());
+    }
+
+    /**
+     * Create a server using the supplied {@code template} for image/location/
+     * server-type/network/etc., while {@code agent} provides node identity
+     * (node name, cloud reference). Required by the DC failover loop in
+     * NodeCallable, where the agent is built once with the first ranked
+     * template but subsequent iterations must target different templates.
+     */
+    public HetznerServerInfo createServer(HetznerServerAgent agent, HetznerServerTemplate template) {
         checkRateLimit("createServer");
         try {
             lock.writeLock().lock();
@@ -451,8 +472,8 @@ public class HetznerCloudResourceManager {
             // The initial cap check in HetznerCloud.provision() is stale by the
             // time this lock is acquired; concurrent NodeCallables may have created
             // servers since then.
-            String cloudName = agent.getTemplate().getCloud().name;
-            int instanceCap = agent.getTemplate().getCloud().getInstanceCap();
+            String cloudName = template.getCloud().name;
+            int instanceCap = template.getCloud().getInstanceCap();
             if (instanceCap > 0) {
                 SERVER_LIST_CACHE.invalidate(cloudName);
                 long running = fetchAllServers(cloudName).stream()
@@ -462,31 +483,31 @@ public class HetznerCloudResourceManager {
                     throw new HetznerProvisioningException(
                             String.format("Instance cap reached under lock: %d running >= %d cap "
                                     + "(cloud=%s)", running, instanceCap, cloudName),
-                            429, "instance_cap_reached", agent.getTemplate().getLocation());
+                            429, "instance_cap_reached", template.getLocation());
                 }
             }
 
-            final SshKeyDetail sshKey = getOrCreateSshKey(agent.getTemplate());
+            final SshKeyDetail sshKey = getOrCreateSshKey(template);
             final String imageId;
             //check if image is label expression
-            if (agent.getTemplate().getImage().contains("=")) {
+            if (template.getImage().contains("=")) {
                 //if so, query image ID
-                imageId = String.valueOf(getImageIdForLabelExpression(agent.getTemplate().getImage()));
+                imageId = String.valueOf(getImageIdForLabelExpression(template.getImage()));
             } else {
-                imageId = agent.getTemplate().getImage();
+                imageId = template.getImage();
             }
 
             final CreateServerRequest createServerRequest = new CreateServerRequest();
-            if (agent.getTemplate().isAutomountVolumes()) {
+            if (template.isAutomountVolumes()) {
                 createServerRequest.setAutomount(true);
             }
-            if (!Strings.isNullOrEmpty(agent.getTemplate().getVolumeIds())) {
-                createServerRequest.setVolumes(Helper.idList(agent.getTemplate().getVolumeIds()));
+            if (!Strings.isNullOrEmpty(template.getVolumeIds())) {
+                createServerRequest.setVolumes(Helper.idList(template.getVolumeIds()));
             }
-            final ConnectivityType ct = agent.getTemplate().getConnectivity().getType();
-            customizeNetworking(ct, createServerRequest, agent.getTemplate().getNetwork(),
+            final ConnectivityType ct = template.getConnectivity().getType();
+            customizeNetworking(ct, createServerRequest, template.getNetwork(),
                     this::configurePrivateNetwork);
-            final String placementGroup = agent.getTemplate().getPlacementGroup();
+            final String placementGroup = template.getPlacementGroup();
             if (!Strings.isNullOrEmpty(placementGroup)) {
                 if(Helper.isPossiblyLong(placementGroup)) {
                     createServerRequest.setPlacementGroup(Long.parseLong(placementGroup));
@@ -494,8 +515,8 @@ public class HetznerCloudResourceManager {
                     createServerRequest.setPlacementGroup(getPlacementGroupForLabelExpression(placementGroup));
                 }
             }
-            final String firewall = agent.getTemplate().getFirewall();
-            if (!Strings.isNullOrEmpty(agent.getTemplate().getFirewall())) {
+            final String firewall = template.getFirewall();
+            if (!Strings.isNullOrEmpty(template.getFirewall())) {
                 if(Helper.isPossiblyLong(firewall)) {
                     createServerRequest.setFirewalls(List.of(new CreateServerFirewallsRequest().
                             firewall(Long.parseLong(firewall))));
@@ -504,21 +525,21 @@ public class HetznerCloudResourceManager {
                             firewall(getFirewallIdForLabelExpression(firewall))));
                 }
             }
-            if (!Strings.isNullOrEmpty(agent.getTemplate().getUserData())) {
-                createServerRequest.setUserData(agent.getTemplate().getUserData());
+            if (!Strings.isNullOrEmpty(template.getUserData())) {
+                createServerRequest.setUserData(template.getUserData());
             }
-            createServerRequest.setServerType(agent.getTemplate().getServerType());
+            createServerRequest.setServerType(template.getServerType());
             createServerRequest.setImage(imageId);
             createServerRequest.setName(agent.getNodeName());
             createServerRequest.setSshKeys(Collections.singletonList(sshKey.getName()));
-            if (agent.getTemplate().getLocation().contains("-")) {
-                createServerRequest.setDatacenter(agent.getTemplate().getLocation());
+            if (template.getLocation().contains("-")) {
+                createServerRequest.setDatacenter(template.getLocation());
             } else {
-                createServerRequest.setLocation(agent.getTemplate().getLocation());
+                createServerRequest.setLocation(template.getLocation());
             }
-            createServerRequest.setLabels(createLabelsForServer(agent.getTemplate().getCloud().name));
+            createServerRequest.setLabels(createLabelsForServer(template.getCloud().name));
             if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC_V6 || ct == ConnectivityType.PUBLIC) {
-                Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
+                Optional.of(template.getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
             }
             log.debug("Calling API to create server resource : {}", createServerRequest);
             final Response<CreateServerResponse> createServerResponse = proxy().createServer(createServerRequest)
@@ -533,7 +554,7 @@ public class HetznerCloudResourceManager {
                     // best effort
                 }
                 String errorCode = Helper.parseHetznerErrorCode(errorBody);
-                String location = agent.getTemplate().getLocation();
+                String location = template.getLocation();
                 throw new HetznerProvisioningException(
                         String.format("Hetzner API error creating server in %s: HTTP %d, code=%s, body=%s",
                                 location, createServerResponse.code(), errorCode, errorBody),
@@ -545,7 +566,7 @@ public class HetznerCloudResourceManager {
             info.setServerDetail(assertValidResponse(createServerResponse, CreateServerResponse::getServer));
             log.info("Server created: name={}, id={}, dc={}, type={} (remaining={})",
                     info.getServerDetail().getName(), info.getServerDetail().getId(),
-                    agent.getTemplate().getLocation(), agent.getTemplate().getServerType(),
+                    template.getLocation(), template.getServerType(),
                     apiClient().getRemaining());
             // Invalidate server list cache so runningNodeCount() sees the new server
             SERVER_LIST_CACHE.invalidate(cloudName);

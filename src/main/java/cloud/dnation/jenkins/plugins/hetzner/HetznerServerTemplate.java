@@ -236,6 +236,83 @@ public class HetznerServerTemplate extends AbstractDescribableImpl<HetznerServer
         );
     }
 
+    /**
+     * Whether this template is safe to swap into an in-flight provision attempt
+     * whose agent was constructed from {@code other}. The agent embeds {@code
+     * other}'s connector / labels / executors / remoteFs / mode; if the
+     * substitute differs on any of those, the resulting Jenkins node would have
+     * mismatched metadata (wrong SSH credentials, wrong labels for the queue
+     * matcher, wrong workspace, etc.) and bootstrap would silently fail.
+     *
+     * Returns {@code true} only when the substitute differs ONLY in location /
+     * server-type / image / network / firewall / userData / placement / volumes
+     * (the fields the API request is built from and that are NOT baked into
+     * the Jenkins agent). DC failover should refuse to attempt the next
+     * ranked template when this returns false.
+     */
+    boolean isFailoverCompatibleWith(HetznerServerTemplate other) {
+        if (other == null) {
+            return false;
+        }
+        if (other == this) {
+            return true;
+        }
+        if (this.numExecutors != other.numExecutors) {
+            return false;
+        }
+        if (!java.util.Objects.equals(this.labelStr, other.labelStr)) {
+            return false;
+        }
+        // Normalize remoteFs: null and empty string both fall through to the
+        // launcher default at agent-construction time, so they're equivalent
+        // for failover purposes.
+        if (!java.util.Objects.equals(
+                Strings.nullToEmpty(this.remoteFs),
+                Strings.nullToEmpty(other.remoteFs))) {
+            return false;
+        }
+        if (this.mode != other.mode) {
+            return false;
+        }
+        // Connector identity: same class + same credentials/port/user override.
+        // Two templates with different SSH credential IDs cannot share an agent
+        // because the launcher caches the credential ID at construction.
+        if (this.connector == null || other.connector == null) {
+            return this.connector == other.connector;
+        }
+        if (!this.connector.getClass().equals(other.connector.getClass())) {
+            return false;
+        }
+        if (!java.util.Objects.equals(this.connector.getSshCredentialsId(),
+                other.connector.getSshCredentialsId())) {
+            return false;
+        }
+        // Normalize sshPort: 0 is the unset sentinel and falls through to the
+        // default port (22) at runtime (see AbstractHetznerSshConnector.readResolve).
+        int thisPort = this.connector.getSshPort() == 0 ? 22 : this.connector.getSshPort();
+        int otherPort = other.connector.getSshPort() == 0 ? 22 : other.connector.getSshPort();
+        if (thisPort != otherPort) {
+            return false;
+        }
+        if (!java.util.Objects.equals(this.connector.getUsernameOverride(),
+                other.connector.getUsernameOverride())) {
+            return false;
+        }
+        // Connection method (IPv4 / IPv6 / private network) determines which
+        // address the launcher SSHes to. The agent's launcher is built from
+        // the original connector at construction; if the failover target
+        // switches connection method, the launcher would try the wrong
+        // address family for the freshly-created VM.
+        Class<?> thisCm = this.connector.getConnectionMethod() != null
+                ? this.connector.getConnectionMethod().getClass() : null;
+        Class<?> otherCm = other.connector.getConnectionMethod() != null
+                ? other.connector.getConnectionMethod().getClass() : null;
+        if (!java.util.Objects.equals(thisCm, otherCm)) {
+            return false;
+        }
+        return true;
+    }
+
     @SuppressWarnings("unused")
     @Extension
     public static final class DescriptorImpl extends Descriptor<HetznerServerTemplate> {

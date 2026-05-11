@@ -83,13 +83,31 @@ class NodeCallable implements Callable<Node> {
                     if (e.isRateLimited()) {
                         // Rate limit is token-scoped, not DC-scoped. All DCs share
                         // the same token; retrying another DC just wastes quota.
+                        // isRateLimited() now requires BOTH HTTP 429 AND code
+                        // "rate_limit_exceeded" so instance_cap_reached (also 429)
+                        // no longer false-aborts failover.
                         HetznerApiClient client = HetznerApiClient.forCredentials(cloud.getCredentialsId());
                         log.warn("Token rate-limited during provisioning of '{}' in DC {} "
-                                + "(remaining={}, resets in {}s), aborting failover",
-                                agent.getNodeName(), location,
+                                + "(cloud={}, template={}, remaining={}, resets in {}s), aborting failover",
+                                agent.getNodeName(), location, cloud.name, template.getName(),
                                 client.getRemaining(), client.timeUntilReset().toSeconds());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
                                 cloud.name, template.getName(), "rate_limited").inc();
+                        throw e;
+                    }
+                    // Bare HTTP 429 with no/unrecognized error code: Hetzner
+                    // returned a throttling status without enough information
+                    // to classify it. Treat as token throttle (the dominant
+                    // cause of 429) rather than recording a DC failure.
+                    if (e.getHttpStatus() == 429
+                            && !"instance_cap_reached".equals(e.getHetznerErrorCode())) {
+                        log.warn("Unclassified HTTP 429 from Hetzner during provisioning of '{}' "
+                                + "(cloud={}, template={}, dc={}, code={}); treating as token "
+                                + "throttle, aborting failover",
+                                agent.getNodeName(), cloud.name, template.getName(), location,
+                                e.getHetznerErrorCode());
+                        HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                cloud.name, template.getName(), "unclassified_throttle").inc();
                         throw e;
                     }
                     if (e.isConfigError()) {
@@ -105,25 +123,76 @@ class NodeCallable implements Callable<Node> {
                                 cloud.name, template.getName(), "config_error").inc();
                         throw e;
                     }
+                    if ("instance_cap_reached".equals(e.getHetznerErrorCode())) {
+                        // Cloud-level capacity bookkeeping (HTTP 429 with our own
+                        // synthetic "instance_cap_reached" code from createServer's
+                        // under-lock cap recheck). Not a DC health signal: another
+                        // DC will hit the same cloud-wide cap. Skip DC failure
+                        // recording so capacity bursts don't poison healthy DCs.
+                        log.warn("Cloud cap reached during burst provisioning "
+                                + "(cloud={}, template={}, dc={}, node={}); skipping DC health "
+                                + "record and failover",
+                                cloud.name, template.getName(), location, agent.getNodeName());
+                        HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                cloud.name, template.getName(), "cap_reached_under_lock").inc();
+                        throw e;
+                    }
                     DcHealthTracker.recordFailure(location);
-                    if (e.isResourceUnavailable() && i < rankedTemplates.size() - 1) {
-                        log.warn("DC {} unavailable ({}), trying next DC ({}/{})",
-                                location, e.getHetznerErrorCode(),
+                    // Failover decision uses isPlausiblyDcAttributable() not the strict
+                    // isResourceUnavailable() check. Hetzner introduces new error codes
+                    // regularly; an unknown 422 or any 5xx is plausibly a DC issue and
+                    // worth one retry on another DC before surfacing the failure.
+                    //
+                    // Additionally gate on isFailoverCompatibleWith(): the agent was
+                    // built from the FIRST ranked template, so swapping to a template
+                    // with different labels / connector / executors / remoteFs would
+                    // create a server whose Jenkins-side metadata is wrong (wrong SSH
+                    // credentials, wrong workspace, wrong queue matcher). When the next
+                    // template is incompatible we treat this as a final failure rather
+                    // than chasing more wrong-metadata bootstraps.
+                    if (e.isPlausiblyDcAttributable() && i < rankedTemplates.size() - 1) {
+                        HetznerServerTemplate next = rankedTemplates.get(i + 1);
+                        HetznerServerTemplate baseline = agent.getTemplate();
+                        if (baseline != null && !baseline.isFailoverCompatibleWith(next)) {
+                            log.warn("DC failover from {} to {} aborted: template '{}' is not "
+                                    + "failover-compatible with '{}' (differs on labels/executors/"
+                                    + "remoteFs/mode/connector). Treating as final failure.",
+                                    location, next.getLocation(), baseline.getName(), next.getName());
+                            HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                                    cloud.name, template.getName(), "failover_incompatible").inc();
+                            throw e;
+                        }
+                        String outcomeLabel = e.isResourceUnavailable() ? "dc_unavailable" : "dc_attributable";
+                        log.warn("DC {} attributable failure ({}/{}), trying next DC ({}/{})",
+                                location, e.getHttpStatus(), e.getHetznerErrorCode(),
                                 i + 1, rankedTemplates.size());
                         HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
-                                cloud.name, template.getName(), "dc_unavailable").inc();
+                                cloud.name, template.getName(), outcomeLabel).inc();
                         HetznerMetricProvider.DC_FAILOVER.labels(
                                 location != null ? location : "",
-                                rankedTemplates.get(i + 1).getLocation() != null
-                                        ? rankedTemplates.get(i + 1).getLocation() : "").inc();
+                                next.getLocation() != null ? next.getLocation() : "").inc();
                         continue;
                     }
                     // Non-retryable error or last template; give up
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
                             cloud.name, template.getName(), "failure").inc();
                     throw e;
+                } catch (java.io.IOException ioe) {
+                    // Launcher / SSH / remoting failures during the post-create
+                    // bootstrap phase. These can be one-off (slow sshd boot) OR
+                    // DC-level (network blip, DC-scoped firewall/ssh outage). We
+                    // record a soft DC failure so chronic DC-level launcher rot
+                    // can trip the breaker over time, while a single slow boot
+                    // doesn't (threshold is 2 consecutive).
+                    lastException = ioe;
+                    DcHealthTracker.recordFailure(location);
+                    HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
+                            cloud.name, template.getName(), "bootstrap_error").inc();
+                    throw ioe;
                 } catch (Exception other) {
-                    // Bootstrap / boot / connect / arch failures.
+                    // Non-IO bootstrap failures: arch mismatch, addNode failure,
+                    // unexpected runtime. NOT recorded as DC failure - these are
+                    // typically Jenkins-side or config issues, not DC health.
                     lastException = other;
                     HetznerMetricProvider.PROVISION_ATTEMPTS.labels(
                             cloud.name, template.getName(), "bootstrap_error").inc();
@@ -156,7 +225,7 @@ class NodeCallable implements Callable<Node> {
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             String dc = template.getLocation() != null ? template.getLocation() : "";
             HetznerMetricProvider.PROVISION_DURATION
-                    .labels(template.getName(), dc, outcome).observe(seconds);
+                    .labels(cloud.name, template.getName(), dc, outcome).observe(seconds);
         }
     }
 
@@ -167,8 +236,16 @@ class NodeCallable implements Callable<Node> {
     @SuppressFBWarnings(value = "REC_CATCH_EXCEPTION",
             justification = "Broad catch ensures leaked servers are destroyed on any failure type")
     private Node doProvision(HetznerServerTemplate template) throws Exception {
-        final HetznerServerInfo serverInfo = cloud.getResourceManager().createServer(agent);
+        // Pass the iteration template explicitly to createServer so DC failover
+        // actually targets a different DC/image/server-type. agent.getTemplate()
+        // is final and set to the FIRST ranked template; without this overload
+        // the failover loop is cosmetic - every iteration would create a server
+        // in the original DC regardless of which template the loop is on.
+        final HetznerServerInfo serverInfo = cloud.getResourceManager().createServer(agent, template);
         final String serverName = serverInfo.getServerDetail().getName();
+        // Track Jenkins-side state for cleanup: a ghost node would block queue
+        // routing if we destroyed the Hetzner server but left the Node entry.
+        boolean nodeAddedToJenkins = false;
         try {
             agent.setServerInstance(serverInfo);
             boolean running = false;
@@ -199,24 +276,61 @@ class NodeCallable implements Callable<Node> {
                     serverInfo.getServerDetail().getServerType(), serverName);
 
             Jenkins.get().addNode(agent);
+            nodeAddedToJenkins = true;
             Computer computer = agent.toComputer();
-            int retry = 5;
-            boolean connected = false;
             if (computer != null) {
-                while (--retry > 0) {
-                    try {
-                        computer.connect(false).get();
-                        connected = true;
-                        break;
-                    } catch (InterruptedException | ExecutionException e) {
-                        log.warn("Connection to '{}' has failed, remaining retries {}",
-                                computer.getDisplayName(), retry, e);
-                        TimeUnit.SECONDS.sleep(10);
-                    }
+                // One bounded connect attempt with the full remaining boot
+                // budget. HetznerServerComputerLauncher already retries SSH
+                // internally; an OUTER retry loop with Future.cancel(true)
+                // risks leaving the prior launcher thread running while a
+                // new computer.connect() starts a second one in parallel.
+                // Codex review R2 finding: cancel(true) does not stop the
+                // launcher; the safe pattern is a single timed attempt and
+                // fail clean on timeout.
+                long remainingMs = waitStrategy.remainingMillis();
+                if (remainingMs <= 0) {
+                    throw new IllegalStateException(String.format(
+                            "Boot deadline expired before connect attempt for '%s' "
+                            + "(server id=%s, cloud=%s, template=%s, dc=%s)",
+                            computer.getName(), serverInfo.getServerDetail().getId(),
+                            cloud.name, template.getName(), template.getLocation()));
                 }
-                if (!connected) {
-                    throw new IllegalStateException(
-                            "Failed to connect to '" + computer.getName() + "' after 5 retries");
+                java.util.concurrent.Future<?> connectFuture = computer.connect(false);
+                try {
+                    connectFuture.get(remainingMs, TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.TimeoutException te) {
+                    connectFuture.cancel(true);
+                    throw new IllegalStateException(String.format(
+                            "Connect to '%s' timed out after %dms "
+                            + "(server id=%s, cloud=%s, template=%s, dc=%s); "
+                            + "launcher cancelled, may briefly continue in background",
+                            computer.getName(), remainingMs,
+                            serverInfo.getServerDetail().getId(),
+                            cloud.name, template.getName(), template.getLocation()), te);
+                } catch (InterruptedException ie) {
+                    connectFuture.cancel(true);
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                } catch (ExecutionException ee) {
+                    // Unwrap IOException causes so the outer catch(IOException)
+                    // records a soft DC bootstrap failure for breaker tracking.
+                    // Codex review R3 finding: wrapping launcher IOException as
+                    // IllegalStateException routed every SSH/launcher failure
+                    // through catch(Exception other), which does NOT call
+                    // DcHealthTracker.recordFailure - so chronic DC-scoped
+                    // launcher rot could never trip the breaker.
+                    // AbortException extends IOException, so it is covered.
+                    Throwable cause = ee.getCause();
+                    if (cause instanceof java.io.IOException) {
+                        throw (java.io.IOException) cause;
+                    }
+                    throw new IllegalStateException(String.format(
+                            "Connect to '%s' failed "
+                            + "(server id=%s, cloud=%s, template=%s, dc=%s)",
+                            computer.getName(),
+                            serverInfo.getServerDetail().getId(),
+                            cloud.name, template.getName(), template.getLocation()),
+                            cause != null ? cause : ee);
                 }
             } else {
                 throw new IllegalStateException(
@@ -228,17 +342,56 @@ class NodeCallable implements Callable<Node> {
 
             return agent;
         } catch (Exception e) {
-            log.error("Failed to bootstrap server '{}', attempting cleanup", serverName, e);
-            try {
-                cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
-                log.warn("Destroyed leaked server '{}'", serverName);
+            // WARN, not ERROR: a single bootstrap failure is a recoverable
+            // event (we destroy the VM, the autoscaler will replace). ERROR
+            // is reserved for cases where cleanup also failed and an operator
+            // needs to act. Codex review R2 logging finding.
+            log.warn("Failed to bootstrap server '{}' (id={}, cloud={}, template={}, dc={}); "
+                    + "attempting cleanup. Cause: {}",
+                    serverName, serverInfo.getServerDetail().getId(),
+                    cloud.name, template.getName(), template.getLocation(),
+                    e.getMessage());
+            // destroyServer returns boolean: true on confirmed delete, false if
+            // the underlying API call swallowed an exception. Branch metrics on
+            // the actual outcome so PROVISION_LEAKED_SERVERS no longer over-
+            // reports successful cleanups when Hetzner rejected the delete.
+            boolean destroyed = cloud.getResourceManager().destroyServer(serverInfo.getServerDetail());
+            if (destroyed) {
+                log.warn("Destroyed leaked server '{}' (id={}, cloud={}, template={}, dc={})",
+                        serverName, serverInfo.getServerDetail().getId(),
+                        cloud.name, template.getName(), template.getLocation());
                 HetznerMetricProvider.PROVISION_LEAKED_SERVERS
                         .labels(cloud.name, template.getName()).inc();
-            } catch (Exception cleanupEx) {
-                log.error("Failed to destroy leaked server '{}' (id={}), manual cleanup required",
-                        serverName, serverInfo.getServerDetail().getId(), cleanupEx);
+            } else {
+                log.error("Failed to destroy leaked server '{}' (id={}, cloud={}, template={}, dc={}); "
+                        + "manual cleanup required (OrphanedNodesCleaner will retry)",
+                        serverName, serverInfo.getServerDetail().getId(),
+                        cloud.name, template.getName(), template.getLocation());
                 HetznerMetricProvider.PROVISION_LEAK_DESTROY_FAILURES
                         .labels(cloud.name, template.getName()).inc();
+            }
+            // Ghost-node prevention: addNode() may have succeeded before connect/
+            // hardware-validation failed. If so, remove the Jenkins Node so it
+            // doesn't sit around offline blocking queue routing for its labels.
+            // Also belt-and-suspenders: lookup by node name even when our flag
+            // says it wasn't added, because addNode() can mutate Jenkins state
+            // and then throw partway through save (Opus review M4).
+            String nodeName = agent.getNodeName();
+            boolean shouldTryRemove = nodeAddedToJenkins
+                    || (nodeName != null && Jenkins.get().getNode(nodeName) != null);
+            if (shouldTryRemove) {
+                try {
+                    // Re-resolve via Jenkins.getNode in case our `agent` reference
+                    // has been swapped or invalidated; tolerates already-removed.
+                    hudson.model.Node existing = Jenkins.get().getNode(nodeName);
+                    if (existing != null) {
+                        Jenkins.get().removeNode(existing);
+                        log.warn("Removed Jenkins node '{}' after bootstrap failure", nodeName);
+                    }
+                } catch (Exception removeEx) {
+                    log.error("Failed to remove ghost Jenkins node '{}' after bootstrap failure; "
+                            + "manual cleanup may be required", nodeName, removeEx);
+                }
             }
             throw e;
         }
@@ -246,22 +399,75 @@ class NodeCallable implements Callable<Node> {
 
     /**
      * Infer expected CPU architecture from Hetzner server type name.
-     * CAX series (cax11, cax21, cax31, cax41) = ARM64 (Ampere Altra).
-     * All others (cx, cpx, ccx, cx, etc.) = x86_64 (Intel/AMD).
-     *
-     * Limitation: relies on Hetzner naming convention. If Hetzner introduces
-     * new ARM server type prefixes (e.g., "aax*"), this method will
-     * incorrectly classify them as x86_64. The post-boot uname check
-     * (Option C) serves as the safety net for this case.
+     * Known ARM prefixes: cax (Ampere Altra). Known x86_64 prefixes: cx, cpx, ccx.
+     * Anything else logs a WARNING and defaults to x86_64 so the post-boot uname
+     * check (Option C) can still catch real mismatches without forcing a hard
+     * failure here. Hetzner introduces new server-type families regularly; the
+     * warning surfaces unknown prefixes in logs for an operator to add to the
+     * known-set explicitly.
      *
      * @param serverType Hetzner server type name (e.g., "cax41", "cpx62")
      * @return "arm64" or "x86_64"
      */
+    private static final java.util.Set<String> KNOWN_ARM_PREFIXES = java.util.Set.of("cax");
+    private static final java.util.Set<String> KNOWN_X86_PREFIXES = java.util.Set.of("cx", "cpx", "ccx");
+    /** Dedup the "unknown family" warning to log at most once per family-per-JVM. */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> WARNED_FAMILIES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     static String inferArchFromServerType(String serverType) {
-        if (serverType != null && serverType.toLowerCase(Locale.ROOT).startsWith("cax")) {
+        if (serverType == null || serverType.isEmpty()) {
+            return "x86_64";
+        }
+        // Extract the alphabetic family name up to the first digit. Earlier
+        // versions used startsWith() which incorrectly classified "cxx11" as
+        // "cx" (x86_64) - any future ARM family with a name like "cxg11"
+        // would silently default to x86_64 instead of warning.
+        String family = extractFamilyPrefix(serverType.toLowerCase(Locale.ROOT));
+        if (family.isEmpty()) {
+            // Dedup even the empty-family path; an all-digit / leading-hyphen
+            // server type from misconfiguration should not flood logs.
+            if (WARNED_FAMILIES.putIfAbsent("<empty>", Boolean.TRUE) == null) {
+                log.warn("Server type '{}' has no alphabetic prefix; defaulting to x86_64 "
+                        + "(this warning is logged once per JVM)", serverType);
+            }
+            return "x86_64";
+        }
+        if (KNOWN_ARM_PREFIXES.contains(family)) {
             return "arm64";
         }
+        if (KNOWN_X86_PREFIXES.contains(family)) {
+            return "x86_64";
+        }
+        // Bound the dedup map to prevent unbounded growth from adversarial
+        // configs. 1024 distinct unknown families is far above any plausible
+        // legitimate set; beyond that we silently default without logging.
+        // Insert-then-check (rather than check-then-insert) so a burst of
+        // concurrent unknown families cannot all race past size() < 1024 and
+        // collectively push the map past the cap (Codex review R3 finding).
+        if (WARNED_FAMILIES.putIfAbsent(family, Boolean.TRUE) == null) {
+            if (WARNED_FAMILIES.size() <= 1024) {
+                log.warn("Unknown Hetzner server type family '{}' (from '{}') - defaulting to x86_64. "
+                        + "If this is an ARM family, update KNOWN_ARM_PREFIXES; the post-boot "
+                        + "uname check is the safety net for now.", family, serverType);
+            } else {
+                // Insertion pushed us past the cap. Remove our entry so the
+                // map stays bounded and a slot remains for a real future
+                // unknown. The same family hitting this path again will
+                // simply be silently defaulted.
+                WARNED_FAMILIES.remove(family);
+            }
+        }
         return "x86_64";
+    }
+
+    /** Extracts the alphabetic prefix up to (but not including) the first digit. */
+    private static String extractFamilyPrefix(String s) {
+        int i = 0;
+        while (i < s.length() && Character.isLetter(s.charAt(i))) {
+            i++;
+        }
+        return s.substring(0, i);
     }
 
     /**
@@ -312,8 +518,21 @@ class NodeCallable implements Callable<Node> {
                 return;
             }
             // uname -m returns: x86_64, aarch64, armv7l, etc.
+            // Use exact normalized match instead of substring "arm" - the substring
+            // form matches armv7l (32-bit ARM) and would also false-match any kernel
+            // build string or path that happens to contain "arm".
             String uname = channel.call(new UnameCallable()).trim();
-            String hardwareArch = uname.contains("aarch64") || uname.contains("arm") ? "arm64" : "x86_64";
+            String unameLower = uname.toLowerCase(Locale.ROOT);
+            String hardwareArch;
+            if ("aarch64".equals(unameLower) || "arm64".equals(unameLower)) {
+                hardwareArch = "arm64";
+            } else if ("x86_64".equals(unameLower) || "amd64".equals(unameLower)) {
+                hardwareArch = "x86_64";
+            } else {
+                log.warn("Unrecognized 'uname -m' output '{}' on server '{}'; treating as x86_64 "
+                        + "for compatibility. Verify the hardware architecture manually.", uname, serverName);
+                hardwareArch = "x86_64";
+            }
             if (!expectedArch.equals(hardwareArch)) {
                 // Use the parsed arch ({arm64, x86_64}) as the "actual" label
                 // value, NOT the raw `uname` output (which can include kernel
@@ -375,6 +594,12 @@ class NodeCallable implements Callable<Node> {
 
         boolean isDeadLineOver() {
             return System.nanoTime() > deadlineNanos;
+        }
+
+        /** Milliseconds left before the deadline, or 0 if already past. */
+        long remainingMillis() {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            return remainingNanos <= 0 ? 0L : remainingNanos / 1_000_000L;
         }
 
         void waitNext() {

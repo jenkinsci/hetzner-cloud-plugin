@@ -88,19 +88,16 @@ class HetznerMetricProviderTest {
     @Test
     void provisionDurationHistogramExposesSumCountAndBuckets() {
         HetznerMetricProvider.PROVISION_DURATION
-                .labels("docker-x64-min", "fsn1", "success").observe(42.0);
-        // _count: number of observations
+                .labels("test-cloud", "docker-x64-min", "fsn1", "success").observe(42.0);
         Double count = R.getSampleValue("hetzner_provision_duration_seconds_count",
-                new String[]{"template", "dc", "outcome"},
-                new String[]{"docker-x64-min", "fsn1", "success"});
-        // _sum: sum of observations
+                new String[]{"cloud", "template", "dc", "outcome"},
+                new String[]{"test-cloud", "docker-x64-min", "fsn1", "success"});
         Double sum = R.getSampleValue("hetzner_provision_duration_seconds_sum",
-                new String[]{"template", "dc", "outcome"},
-                new String[]{"docker-x64-min", "fsn1", "success"});
-        // _bucket: at least the +Inf bucket should count this observation
+                new String[]{"cloud", "template", "dc", "outcome"},
+                new String[]{"test-cloud", "docker-x64-min", "fsn1", "success"});
         Double bucketInf = R.getSampleValue("hetzner_provision_duration_seconds_bucket",
-                new String[]{"template", "dc", "outcome", "le"},
-                new String[]{"docker-x64-min", "fsn1", "success", "+Inf"});
+                new String[]{"cloud", "template", "dc", "outcome", "le"},
+                new String[]{"test-cloud", "docker-x64-min", "fsn1", "success", "+Inf"});
         assertEquals(1.0, count);
         assertEquals(42.0, sum);
         assertEquals(1.0, bucketInf);

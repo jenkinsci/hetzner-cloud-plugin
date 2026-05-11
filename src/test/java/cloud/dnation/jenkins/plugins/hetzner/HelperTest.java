@@ -156,15 +156,27 @@ class HelperTest {
 
     @Test
     void testHetznerProvisioningException_isRateLimited() {
-        // HTTP 429 is rate-limited
-        HetznerProvisioningException ex429 = new HetznerProvisioningException(
-                "test", 429, null, "fsn1");
-        assertTrue(ex429.isRateLimited());
+        // Strict contract (post-fix): requires BOTH HTTP 429 AND code
+        // "rate_limit_exceeded". Hetzner returns 429 for several conditions
+        // (real token rate limit, instance_cap_reached, others); only the
+        // first is a real token-scoped quota burn worth aborting failover for.
+        // Detailed semantics covered in HetznerProvisioningExceptionTest.
 
-        // rate_limit_exceeded error code (regardless of HTTP status)
-        HetznerProvisioningException exCode = new HetznerProvisioningException(
+        HetznerProvisioningException exReal = new HetznerProvisioningException(
+                "test", 429, "rate_limit_exceeded", "fsn1");
+        assertTrue(exReal.isRateLimited(), "429 + rate_limit_exceeded is the real token rate limit");
+
+        // Bare 429 with null code: no longer treated as rate limit
+        HetznerProvisioningException ex429NullCode = new HetznerProvisioningException(
+                "test", 429, null, "fsn1");
+        assertFalse(ex429NullCode.isRateLimited(),
+                "bare 429 with null code must NOT be rate-limited (could be instance_cap_reached etc.)");
+
+        // Code-only without 429: not rate-limited
+        HetznerProvisioningException exCodeOnly = new HetznerProvisioningException(
                 "test", 200, "rate_limit_exceeded", "fsn1");
-        assertTrue(exCode.isRateLimited());
+        assertFalse(exCodeOnly.isRateLimited(),
+                "code without 429 status must NOT be rate-limited");
 
         // Normal error should NOT be rate-limited
         HetznerProvisioningException ex500 = new HetznerProvisioningException(

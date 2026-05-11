@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -90,7 +91,7 @@ class NodeCallableRetryTest {
         when(agent.getComputer()).thenReturn(null);
 
         // First call (fsn1) throws resource_unavailable
-        when(mgr.createServer(any())).thenThrow(
+        when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("DC full", 422, "resource_unavailable", "fsn1"));
 
         List<HetznerServerTemplate> ranked = List.of(t1, t2);
@@ -117,7 +118,7 @@ class NodeCallableRetryTest {
         when(agent.getComputer()).thenReturn(null);
 
         // Auth error: should NOT retry
-        when(mgr.createServer(any())).thenThrow(
+        when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("Unauthorized", 401, "unauthorized", "fsn1"));
 
         List<HetznerServerTemplate> ranked = List.of(t1, t2);
@@ -143,7 +144,7 @@ class NodeCallableRetryTest {
         when(agent.getComputer()).thenReturn(null);
 
         // Both DCs fail with resource_unavailable
-        when(mgr.createServer(any()))
+        when(mgr.createServer(any(), any()))
                 .thenThrow(new HetznerProvisioningException("DC full", 422, "resource_unavailable", "fsn1"))
                 .thenThrow(new HetznerProvisioningException("DC full", 422, "resource_unavailable", "nbg1"));
 
@@ -158,6 +159,43 @@ class NodeCallableRetryTest {
         assertTrue(DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures() >= 1);
     }
 
+    /**
+     * Regression: prior implementation called {@code createServer(agent)} where
+     * the agent's template was final and set to the first ranked template. The
+     * DC failover loop iterated rankedTemplates but every API call still used
+     * the first template's image/DC/server-type. The fix introduces a 2-arg
+     * overload {@code createServer(agent, template)} and routes per-iteration
+     * templates through it. This test pins that contract: when failover occurs,
+     * createServer is called with t1 on iteration 1 AND t2 on iteration 2.
+     */
+    @Test
+    void failoverActuallyUsesEachRankedTemplate() throws Exception {
+        HetznerServerTemplate t1 = makeTemplate("t1", "fsn1");
+        HetznerServerTemplate t2 = makeTemplate("t2", "nbg1");
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-cred", "10",
+                Lists.newArrayList(t1, t2));
+
+        HetznerServerAgent agent = mock(HetznerServerAgent.class);
+        when(agent.getTemplate()).thenReturn(t1);
+        when(agent.getComputer()).thenReturn(null);
+
+        when(mgr.createServer(any(), any()))
+                .thenThrow(new HetznerProvisioningException("DC full", 422, "resource_unavailable", "fsn1"))
+                .thenThrow(new HetznerProvisioningException("DC full", 422, "resource_unavailable", "nbg1"));
+
+        List<HetznerServerTemplate> ranked = List.of(t1, t2);
+        NodeCallable callable = new NodeCallable(agent, cloud, ranked);
+
+        assertThrows(HetznerProvisioningException.class, callable::call);
+
+        // The critical assertion: createServer must be invoked with each
+        // ranked template in turn. The previous bug would have called it
+        // twice with t1 only.
+        verify(mgr, times(1)).createServer(any(), eq(t1));
+        verify(mgr, times(1)).createServer(any(), eq(t2));
+    }
+
     @Test
     void singleTemplateNoRetry() throws Exception {
         HetznerServerTemplate t1 = makeTemplate("t1", "fsn1");
@@ -169,7 +207,7 @@ class NodeCallableRetryTest {
         when(agent.getTemplate()).thenReturn(t1);
         when(agent.getComputer()).thenReturn(null);
 
-        when(mgr.createServer(any())).thenThrow(
+        when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("DC full", 422, "resource_unavailable", "fsn1"));
 
         List<HetznerServerTemplate> ranked = List.of(t1);
@@ -192,7 +230,7 @@ class NodeCallableRetryTest {
         when(agent.getComputer()).thenReturn(null);
 
         // Rate-limit error: should abort immediately, no DC failover
-        when(mgr.createServer(any())).thenThrow(
+        when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("Rate limited", 429, "rate_limit_exceeded", "fsn1"));
 
         List<HetznerServerTemplate> ranked = List.of(t1, t2);
@@ -204,7 +242,7 @@ class NodeCallableRetryTest {
         assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
         assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
         // Verify only ONE provisioning attempt was made (no DC failover)
-        verify(mgr, times(1)).createServer(any());
+        verify(mgr, times(1)).createServer(any(), any());
     }
 
     @Test
@@ -220,7 +258,7 @@ class NodeCallableRetryTest {
         when(agent.getComputer()).thenReturn(null);
 
         // Config error: should abort immediately, no DC failover
-        when(mgr.createServer(any())).thenThrow(
+        when(mgr.createServer(any(), any())).thenThrow(
                 new HetznerProvisioningException("Invalid image", 422, "invalid_input", "fsn1"));
 
         List<HetznerServerTemplate> ranked = List.of(t1, t2);
@@ -232,12 +270,114 @@ class NodeCallableRetryTest {
         assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
         assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
         // Verify only ONE provisioning attempt was made (no DC failover)
-        verify(mgr, times(1)).createServer(any());
+        verify(mgr, times(1)).createServer(any(), any());
+    }
+
+    /**
+     * Regression: cloud-cap exhaustion under burst is reported by the
+     * resource manager as HTTP 429 with synthetic code "instance_cap_reached".
+     * This is cap bookkeeping, not a DC health signal - all DCs share the
+     * same cap, so other DCs cannot help. We must NOT bump
+     * DcHealthTracker.recordFailure for this case; otherwise burst traffic
+     * would open the breaker for healthy DCs.
+     */
+    @Test
+    void instanceCapReachedDoesNotPoisonDcHealth() throws Exception {
+        HetznerServerTemplate t1 = makeTemplate("t1", "fsn1");
+        HetznerServerTemplate t2 = makeTemplate("t2", "nbg1");
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-cred", "10",
+                Lists.newArrayList(t1, t2));
+
+        HetznerServerAgent agent = mock(HetznerServerAgent.class);
+        when(agent.getTemplate()).thenReturn(t1);
+        when(agent.getComputer()).thenReturn(null);
+
+        when(mgr.createServer(any(), any())).thenThrow(
+                new HetznerProvisioningException("Cap reached under lock", 429,
+                        "instance_cap_reached", "fsn1"));
+
+        List<HetznerServerTemplate> ranked = List.of(t1, t2);
+        NodeCallable callable = new NodeCallable(agent, cloud, ranked);
+
+        assertThrows(HetznerProvisioningException.class, callable::call);
+        // No DC failures recorded - cap is cloud-wide, not DC-scoped
+        assertEquals(0, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
+        assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
+        // No failover either
+        verify(mgr, times(1)).createServer(any(), eq(t1));
+        verify(mgr, times(0)).createServer(any(), eq(t2));
+    }
+
+    /**
+     * Regression: when the second ranked template has a different SSH
+     * credential ID, failover must be REFUSED (because the agent embeds the
+     * original template's launcher, which has the original credential). The
+     * code logs and treats this as a final failure rather than churning a
+     * second VM that nobody can SSH into.
+     */
+    @Test
+    void failoverRefusedWhenTemplateIncompatible() throws Exception {
+        // t1 uses connector with credential "cred-A"; t2 uses "cred-B"
+        AbstractHetznerSshConnector connA = mock(AbstractHetznerSshConnector.class);
+        when(connA.getSshCredentialsId()).thenReturn("cred-A");
+        when(connA.getSshPort()).thenReturn(22);
+        AbstractHetznerSshConnector connB = mock(AbstractHetznerSshConnector.class);
+        when(connB.getSshCredentialsId()).thenReturn("cred-B");
+        when(connB.getSshPort()).thenReturn(22);
+
+        HetznerServerTemplate t1 = makeTemplate("t1", "fsn1", connA);
+        HetznerServerTemplate t2 = makeTemplate("t2", "nbg1", connB);
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-01", "mock-cred", "10",
+                Lists.newArrayList(t1, t2));
+
+        HetznerServerAgent agent = mock(HetznerServerAgent.class);
+        when(agent.getTemplate()).thenReturn(t1);
+        when(agent.getComputer()).thenReturn(null);
+
+        when(mgr.createServer(any(), any())).thenThrow(
+                new HetznerProvisioningException("DC full", 422, "resource_unavailable", "fsn1"));
+
+        List<HetznerServerTemplate> ranked = List.of(t1, t2);
+        NodeCallable callable = new NodeCallable(agent, cloud, ranked);
+
+        HetznerProvisioningException ex = assertThrows(HetznerProvisioningException.class, callable::call);
+        assertEquals("fsn1", ex.getLocation());
+        // Critical: createServer must NOT have been called on t2 because the
+        // compatibility check refused failover.
+        verify(mgr, times(1)).createServer(any(), eq(t1));
+        verify(mgr, times(0)).createServer(any(), eq(t2));
+        // fsn1 failure is still recorded (the API call failed before the
+        // compatibility check refused failover).
+        assertEquals(1, DcHealthTracker.getBreaker("fsn1").getConsecutiveFailures());
+        assertEquals(0, DcHealthTracker.getBreaker("nbg1").getConsecutiveFailures());
+    }
+
+    /**
+     * Shared connector for the failover tests so {@link
+     * HetznerServerTemplate#isFailoverCompatibleWith(HetznerServerTemplate)}
+     * returns true. Templates that differ only in DC/server-type/image are
+     * the canonical Percona pattern; the compatibility check refuses failover
+     * when connector identity differs, so each scenario must use the same
+     * connector instance.
+     */
+    private AbstractHetznerSshConnector sharedConnector() {
+        AbstractHetznerSshConnector c = mock(AbstractHetznerSshConnector.class);
+        when(c.getSshCredentialsId()).thenReturn("shared-cred");
+        when(c.getSshPort()).thenReturn(22);
+        when(c.getUsernameOverride()).thenReturn(null);
+        return c;
     }
 
     private HetznerServerTemplate makeTemplate(String name, String location) {
+        return makeTemplate(name, location, sharedConnector());
+    }
+
+    private HetznerServerTemplate makeTemplate(String name, String location,
+                                               AbstractHetznerSshConnector connector) {
         HetznerServerTemplate t = new HetznerServerTemplate(name, "label1", "img1", location, "cpx32");
-        t.setConnector(mock(AbstractHetznerSshConnector.class));
+        t.setConnector(connector);
         return t;
     }
 }

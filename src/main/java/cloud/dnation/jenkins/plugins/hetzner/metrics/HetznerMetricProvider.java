@@ -99,7 +99,11 @@ public final class HetznerMetricProvider {
     public static final Histogram PROVISION_DURATION = Histogram.build()
             .name("hetzner_provision_duration_seconds")
             .help("Wall time of NodeCallable.doProvision() per attempt")
-            .labelNames("template", "dc", "outcome")
+            // Includes cloud so multi-cloud deployments don't collapse series
+            // across instances with identically-named templates (e.g. two
+            // masters both named "t1" in the same DC). All other PROVISION_*
+            // metrics already carry cloud; this aligns it.
+            .labelNames("cloud", "template", "dc", "outcome")
             // Bucket fill: typical healthy boot lands 60-90s on Hetzner; the
             // 90/180s rungs catch boot drift before the 300s cliff.
             .buckets(5, 15, 30, 60, 90, 120, 180, 300, 600, 900)
