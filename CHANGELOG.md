@@ -2,6 +2,20 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.14 (2026-05-12)
+
+Wait for cloud-init to finish before launching the remoting JVM.
+
+### Fixed
+- `HetznerServerComputerLauncher` generates an `.agent.start.sh` that calls `cloud-init status --wait` (when present) and verifies `java` exists on PATH before `exec`'ing the remoting JVM. Previously the script ran `java -jar remoting.jar` immediately; on stock images (e.g. Hetzner debian-12) where the user-data script installs openjdk via apt during cloud-init's `modules-final` stage, java was not yet on PATH and the channel EOFed instantly. Symptom: chronic `java.io.EOFException: unexpected stream termination` at `HetznerServerComputerLauncher.launchAgent` with a high `bootstrap_io` rate (verified on pg.cd and psmdb.cd; cpx62 reproduction showed cloud-init `modules-final` taking ~49 seconds during which `which java` returned not-found).
+- The script logs to stderr only (stdout is the remoting channel) and exits with a clear nonzero code on cloud-init failure or missing java, instead of letting the EOF surface as an opaque bootstrap failure.
+- Controller-side `logger.info` line in `launchAgent()` now states that the launch script waits for cloud-init, so the Jenkins log shows expected behavior even when remote stderr is not wired through.
+
+### Context
+- Pre-baked images (no `cloud-init` on PATH, java already installed) skip the wait and fall straight through. The aarch64 snapshot path is unaffected.
+- Outer bound is unchanged: `NodeCallable.doProvision` still wraps `computer.connect(false)` in a Future bounded by the template's `bootDeadline` minutes.
+- A long-term follow-up is to pre-bake a Hetzner snapshot with java/docker/awscli installed; that is orthogonal to this fix and will reduce provisioning latency by the cloud-init `modules-final` time on top of fixing the race.
+
 ## v103.percona.11 (2026-05-08)
 
 Make `/hetzner-prometheus` an `UnprotectedRootAction` so anonymous loopback callers are not blocked by Jenkins core authorization.

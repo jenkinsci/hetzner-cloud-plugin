@@ -107,7 +107,26 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
             justification = "NULLnes of node is checked in launch method")
     private String getAgentCommand(HetznerServerComputer computer, String remoteFs) {
         final String jvmOpts = Util.fixNull(computer.getNode().getTemplate().getJvmOpts());
-        return "java " + jvmOpts + " -jar " + remoteFs + "/remoting.jar -workDir " + remoteFs;
+        // Hetzner reports status="running" the instant the kernel boots, but on stock
+        // images the user-data script (apt install openjdk + docker + awscli) runs in
+        // cloud-init's modules-final stage and can take 1-3 minutes to finish. Without
+        // this guard, exec("java -jar remoting.jar") fires before java exists on PATH
+        // and the channel EOFs immediately, surfacing as bootstrap_io. Logs only on
+        // stderr (stdout is the remoting channel). Pre-baked images without cloud-init
+        // skip the wait and fall straight through to the java probe.
+        return "if command -v cloud-init >/dev/null 2>&1; then\n"
+                + "  echo 'Waiting for cloud-init to finish before starting Jenkins agent' >&2\n"
+                + "  cloud-init status --wait >/dev/null 2>&1 || {\n"
+                + "    rc=$?\n"
+                + "    echo \"cloud-init did not complete successfully, rc=$rc\" >&2\n"
+                + "    exit \"$rc\"\n"
+                + "  }\n"
+                + "fi\n"
+                + "command -v java >/dev/null 2>&1 || {\n"
+                + "  echo 'java not found after cloud-init completed' >&2\n"
+                + "  exit 127\n"
+                + "}\n"
+                + "exec java " + jvmOpts + " -jar " + remoteFs + "/remoting.jar -workDir " + remoteFs;
     }
 
     private void launchAgent(Connection connection,
@@ -130,7 +149,8 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
             launchCmd = scriptCmd;
         }
 
-        logger.info("Launching agent using '" + launchCmd + "'");
+        logger.info("Launching agent using '" + launchCmd + "' "
+                + "(launch script waits for cloud-init before exec'ing java)");
         session.execCommand(launchCmd);
         computer.setChannel(session.getStdout(), session.getStdin(), listener, new Channel.Listener() {
             @Override

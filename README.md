@@ -18,11 +18,17 @@
 
 Forked from [jenkinsci/hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) v103 with robustness, rate-limiting, retry, and DC failover patches.
 
-Current version: **v103.percona.11**.
+Current version: **v103.percona.14**.
 
 For older releases (v103.percona.1 through v103.percona.8), see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Percona patches
+
+### v103.percona.14: Wait for cloud-init before launching remoting JVM
+
+`HetznerServerComputerLauncher.getAgentCommand()` now wraps the remoting launch in a guard that calls `cloud-init status --wait` (when present) and verifies `java` is on PATH before `exec`'ing the JVM. On stock images (Hetzner debian-12, image id 114690387) the user-data script installs openjdk via apt during cloud-init's `modules-final` stage and can take 1-3 minutes to finish; the plugin previously SSHed in as soon as Hetzner reported `status="running"`, scped the launch script, and `exec`'d `java -jar remoting.jar` while apt was still unpacking openjdk. The channel EOFed instantly and the failure surfaced as `bootstrap_io`. Verified on pg.cd (hundreds of `EOFException: unexpected stream termination` at `HetznerServerComputerLauncher.launchAgent`) and reproduced on a cpx62 in pg.cd's private network: cloud-init `modules-final` took ~49 seconds, during which `which java` returned not-found while the plugin's launch was firing.
+
+Pre-baked images (no `cloud-init` on PATH and java already installed) skip the wait. The aarch64 snapshot path is unaffected. The outer `bootDeadline` future bound in `NodeCallable.doProvision` is unchanged, so a hung cloud-init is still cleaned up by the existing timeout.
 
 ### v103.percona.11: Anonymous loopback metrics endpoint
 
