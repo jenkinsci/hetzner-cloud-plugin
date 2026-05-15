@@ -2,6 +2,20 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.16 (2026-05-15)
+
+Periodically refresh `hetzner_running_servers` and `hetzner_provisioning_pending` regardless of provisioning activity.
+
+### Fixed
+- `hetzner_running_servers` no longer pins to the last-known value when a cloud is idle. New `HetznerMetricsRefresher` (PeriodicWork, period: 1 minute) walks every configured `HetznerCloud` and calls a new `public HetznerCloud.refreshMetrics()` method, which re-queries the Hetzner API for the live server count and re-emits the in-memory pending counter. Observed before the fix: psmdb.cd reported `hetzner_running_servers=25` in Mimir while the Hetzner API showed only 2 running servers; the cloud had drained from a recent peak but no new provision attempts triggered a gauge update, so the metric was stuck for hours.
+- The new `refreshMetrics()` method is also called defensively against `PROVISIONING_PENDING` from the in-memory `pendingProvisions` AtomicInteger, so a forgotten `set(...)` after an atomic mutation does not desync the gauge.
+
+### Why
+- Field deployment of `v103.percona.15` to the 10-master Percona Jenkins fleet exposed the discrepancy when validating the new dashboard panel 200 ("Active workers per master") at 2026-05-15 09:30 UTC. The new panel would show 25/100 utilisation for psmdb when the truth was 2/100, making the dashboard misleading.
+
+### Rate-limit hygiene
+- Per-cloud refresh consumes one Hetzner API call per minute (60/hour). Token budget is 3600/hour, so even 15 templates across 10 masters share the cost comfortably. The refresher skips refresh if the credentials' rate-limiter is open, same pattern as `OrphanedNodesCleaner`.
+
 ## v103.percona.15 (2026-05-15)
 
 Surface the actual running Jenkins core version on `hetzner_plugin_info`.

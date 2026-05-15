@@ -174,6 +174,34 @@ public class HetznerCloud extends AbstractCloudImpl {
     }
 
     /**
+     * Refresh the running and pending gauges from authoritative sources.
+     * Called by {@link HetznerMetricsRefresher} on a periodic timer so the
+     * gauges reflect reality even when the cloud is idle and no provisioning
+     * has fired recently. Without this, {@code hetzner_running_servers}
+     * stays pinned to the last-known value (last time {@code provision()}
+     * called {@code runningNodeCount()}), which can be wildly stale (e.g.
+     * 25 reported in Mimir while only 2 servers actually run).
+     *
+     * <p>Exception-swallowing matches {@code runningNodeCount}'s
+     * {@code @SneakyThrows} contract: a transient Hetzner API failure
+     * leaves the gauge at its last-good value rather than gapping, and
+     * persistent staleness is observable as a flat line on the dashboard.
+     */
+    public void refreshMetrics() {
+        try {
+            runningNodeCount();
+        } catch (Exception e) {
+            log.warn("Refresh of hetzner_running_servers failed for cloud '{}': {}",
+                    name, e.getMessage());
+        }
+        // PROVISIONING_PENDING tracks an in-memory AtomicInteger, so it
+        // does not drift from the network; re-emit defensively in case a
+        // provisioning code path forgot to update the gauge after mutating
+        // the counter.
+        HetznerMetricProvider.PROVISIONING_PENDING.labels(name).set(pendingProvisions.get());
+    }
+
+    /**
      * Decrement the pending provision counter. Called by NodeCallable when
      * provisioning completes (success or failure).
      */
