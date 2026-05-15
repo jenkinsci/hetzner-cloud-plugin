@@ -13,6 +13,7 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
+import jenkins.model.Jenkins;
 
 /**
  * Prometheus instruments for the Hetzner Cloud plugin (PS-10997).
@@ -483,7 +484,7 @@ public final class HetznerMetricProvider {
     public static final Gauge PLUGIN_INFO = Gauge.build()
             .name("hetzner_plugin_info")
             .help("Hetzner Cloud plugin identity: 1 if plugin loaded; labels carry version metadata")
-            .labelNames("plugin_version", "jenkins_baseline", "fork")
+            .labelNames("plugin_version", "jenkins_version", "fork")
             .register();
 
     /**
@@ -546,7 +547,13 @@ public final class HetznerMetricProvider {
         if (version == null || version.isEmpty()) {
             version = "snapshot";
         }
-        PLUGIN_INFO.labels(version, "2.479", "percona").set(1);
+        String jenkinsVersion;
+        try {
+            jenkinsVersion = Jenkins.getVersion() != null ? Jenkins.getVersion().toString() : "unknown";
+        } catch (Throwable ignored) {
+            jenkinsVersion = "unknown";
+        }
+        PLUGIN_INFO.labels(version, jenkinsVersion, "percona").set(1);
 
         String osName = sanitize(System.getProperty("os.name", "unknown"));
         String osArch = sanitize(System.getProperty("os.arch", "unknown"));

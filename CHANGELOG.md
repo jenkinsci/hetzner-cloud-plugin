@@ -2,6 +2,19 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.15 (2026-05-15)
+
+Surface the actual running Jenkins core version on `hetzner_plugin_info`.
+
+### Changed
+- `hetzner_plugin_info` metric label `jenkins_baseline` renamed to `jenkins_version`. The label value was previously the hard-coded string `"2.479"` (matching `<jenkins.baseline>` in `pom.xml` only by convention); it now reads from `Jenkins.getVersion().toString()` at class init, so it reports the real running core version on each master (e.g. `2.528.3`, `2.541.3`). Fully guarded with try/catch; value is `"unknown"` if the call throws or returns null.
+
+### Why
+- Field deployment of `103.percona.14` to the 10-master Percona Jenkins fleet exposed that every master emitted `jenkins_baseline="2.479"` regardless of its actual running core version, which made the label useless for dashboards intending to break out per-core-version behaviour.
+
+### Migration note
+- Any Grafana queries or alerts referencing the old `jenkins_baseline` label must be updated to `jenkins_version`. Within Percona's repos this is only the panel-104 transform `renameByName` in `percona-ci-platform/resources/addons/grafana/dashboards/hetzner-plugin.json`.
+
 ## v103.percona.14 (2026-05-12)
 
 Wait for cloud-init to finish before launching the remoting JVM.
