@@ -1,7 +1,7 @@
 # Hetzner Cloud Plugin for Jenkins - Build, Test & Deploy
 # Patched version with retention bug fixes + DC failover (Percona)
 
-version := "103.percona.16"
+version := "103.percona.17"
 image := "maven:3.9-eclipse-temurin-17"
 container := "hetzner-build"
 m2_volume := "hetzner-m2-cache"

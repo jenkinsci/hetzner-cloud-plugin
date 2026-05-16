@@ -2,6 +2,33 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.17 (2026-05-16)
+
+Detect long-running ("hung") builds where `Run.isBuilding()` keeps returning `true` for days, and emit Prometheus metrics so Mimir surfaces the condition before it accretes into a fleet-wide outage.
+
+### Fixed
+- New `HungBuildDetector` (PeriodicWork, period: 10 minutes by default) iterates the controller's executors on every tick, identifies still-building runs older than the configured threshold (24h by default), and increments a dedup-cached counter for each unique build. Without this, the v103.percona.16 + CLI `executors --real` pipeline trusted `Run.isBuilding()` to filter zombie executors; production traffic on rel.cd and pmm.cd revealed runs reporting `isBuilding=true` for 3.9 to 6.4 days, stalling the idle-master plugin-upgrade cron for 6+ hours on 2026-05-15/16.
+- A new gauge `hetzner_executor_busy_real{master}` mirrors the CLI's `--real` count plugin-side, so readiness/is-idle probes can hit `/hetzner-prometheus` directly instead of round-tripping a Groovy snippet through Script Console for every check.
+
+### Why
+- The CLI's `executors --real` flag (shipped 2026-05-16) is the load-bearing filter for the idle-master cron. Trusting `Run.isBuilding()` alone is insufficient: layering an independent age threshold on top is necessary to distinguish real work from corrupted run state. The plugin owns the data Jenkins doesn't honestly report through its own APIs.
+
+### Added metrics
+- `hetzner_stuck_builds_total{master, template, threshold_hours}` -- Counter. Incremented exactly once per (build, threshold) when the build first crosses the threshold; a 7-day dedup TTL covers the longest plausible stuck-build lifetime before manual intervention. Use `increase()` / `rate()` over the total since a JVM restart drops the dedup cache.
+- `hetzner_oldest_build_age_seconds{master, template}` -- Gauge. Set on every tick to the max elapsed time among still-building runs grouped by Hetzner template. Templates without in-flight builds at the tick boundary are absent from the series for that emit cycle.
+- `hetzner_executor_busy_real{master}` -- Gauge. Count of executors whose currently-executing `Queue.Executable` is a `Run` with `isBuilding=true`.
+
+### Configuration knobs (system properties)
+- `hetzner.hung-build.threshold-hours` (default `24`) -- a build older than this is classified hung. Honored fresh on each tick.
+- `hetzner.hung-build.poll-period-minutes` (default `10`) -- detector recurrence period. Read by Jenkins scheduler on each reschedule.
+- `hetzner.master.label` (operator override) -- the `master` label value emitted on the new metrics. Falls back to the leading hostname of `JenkinsLocationConfiguration.getUrl()` with a `.cd` suffix (e.g. `rel.cd`), then empty (Alloy's `external_labels` on the push pipeline adds the value downstream).
+
+### Implementation notes
+- Iterates `Jenkins.getComputers()[].getExecutors()` rather than `Jenkins.getAllItems(Run.class)`: the executor-walking path is bounded by the executor count (typically <100 per master) and avoids touching cold historical run state.
+- `templateOf(Computer)` walks `computer.getNode()` and casts to `HetznerServerAgent` to recover the template name. Non-Hetzner agents (built-in controller, EC2, manually-added nodes) and post-restart deserialized agents (template is transient) report `template="unknown"`; dashboards should filter `template!="unknown"` on per-template panels.
+- A threshold tweak via system property re-arms the counter at the new boundary (the dedup key includes `thresholdHours`), but does NOT reset the existing dedup cache. A build that already crossed 24h does not re-arm if the threshold drops to 12h. Restart the JVM (or wait 7 days for cache expiry) to re-arm such builds explicitly.
+- Defensive `try/catch(Throwable)` in `doRun()` mirrors `HetznerMetricsRefresher` / `OrphanedNodesCleaner`: a Jenkins-core or Hetzner-API exception cannot kill the timer.
+
 ## v103.percona.16 (2026-05-15)
 
 Periodically refresh `hetzner_running_servers` and `hetzner_provisioning_pending` regardless of provisioning activity.
