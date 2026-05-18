@@ -539,8 +539,18 @@ public final class HetznerMetricProvider {
             .register();
 
     // =====================================================================
-    // Hung-build detection (v103.percona.17)
+    // Hung-build detection (v103.percona.17, label set updated v103.percona.18)
     // =====================================================================
+    //
+    // v18 dropped the in-plugin `master` label from all three metrics below.
+    // Per ADR 0013 (push model), master-side Grafana Alloy injects
+    // `master="<inst>.cd"` via relabel config on the push pipeline, so the
+    // plugin-side label was redundant; worse, the empty-string fallback that
+    // applied when JenkinsLocationConfiguration was unset emitted series
+    // dashboards filtering `master=~".+\\.cd"` would silently drop. Letting
+    // Alloy own the label keeps the in-plugin contract honest (only emit what
+    // the plugin actually knows about) and aligns with every other v16-era
+    // hetzner_* metric, none of which carry a plugin-emitted master label.
 
     /**
      * Counter: builds that crossed the configured hung-build threshold while
@@ -559,19 +569,20 @@ public final class HetznerMetricProvider {
     public static final Counter STUCK_BUILDS_TOTAL = Counter.build()
             .name("hetzner_stuck_builds_total")
             .help("Builds that crossed the hung-build threshold while isBuilding=true")
-            .labelNames("master", "template", "threshold_hours")
+            .labelNames("template", "threshold_hours")
             .register();
 
     /**
-     * Gauge: age in seconds of the oldest still-building run, per
-     * (master, template). Set on every detector tick. Templates without
-     * in-flight builds at the tick boundary are not present in the family
-     * for that emit cycle; consumers should treat absence as zero.
+     * Gauge: age in seconds of the oldest still-building run, per template.
+     * Set on every detector tick. Templates without in-flight builds at the
+     * tick boundary are explicitly cleared from the family (via
+     * {@code remove()}) so the gauge does not pin at the last-known peak after
+     * a hung build finishes.
      */
     public static final Gauge OLDEST_BUILD_AGE_SECONDS = Gauge.build()
             .name("hetzner_oldest_build_age_seconds")
             .help("Age in seconds of the oldest still-building run per template")
-            .labelNames("master", "template")
+            .labelNames("template")
             .register();
 
     /**
@@ -585,11 +596,15 @@ public final class HetznerMetricProvider {
      * <p>This is the same signal the CLI's {@code --real} flag trusts; pair
      * with {@link #STUCK_BUILDS_TOTAL} (age threshold) to distinguish real
      * work from hung runs.
+     *
+     * <p>v18 rename: was {@code hetzner_executor_busy_real} in v17. The new
+     * name follows the {@code hetzner_<domain>_<thing>} convention and
+     * groups with other Jenkins-side metrics in the family namespace. No
+     * live Grafana panel referenced the v17 name yet.
      */
-    public static final Gauge EXECUTOR_BUSY_REAL = Gauge.build()
-            .name("hetzner_executor_busy_real")
+    public static final Gauge JENKINS_REAL_BUSY_EXECUTORS = Gauge.build()
+            .name("hetzner_jenkins_real_busy_executors")
             .help("Executors currently running a Run with isBuilding=true")
-            .labelNames("master")
             .register();
 
     // =====================================================================
@@ -632,87 +647,6 @@ public final class HetznerMetricProvider {
         }
         String s = raw.trim().toLowerCase().replaceAll("\\s+", "_");
         return s.length() > 64 ? s.substring(0, 64) : s;
-    }
-
-    /**
-     * Resolve the {@code master} label value used by hung-build metrics.
-     *
-     * <p>Resolution order (first non-empty wins):
-     * <ol>
-     *   <li>{@code hetzner.master.label} JVM system property (operator override).
-     *   <li>Derived from the Jenkins root URL: the leading hostname segment is
-     *       taken as the master identity, with a {@code .cd} suffix appended if
-     *       not already present (matching the Percona convention used by
-     *       observability dashboards, e.g. {@code rel.cd}, {@code pmm.cd}).
-     *   <li>Empty string. The Alloy systemd unit on each master injects
-     *       {@code external_labels: master="<inst>.cd"} on push, so missing
-     *       in-plugin values are still labeled correctly downstream; this
-     *       fallback only matters for the rare operator who scrapes the
-     *       endpoint directly.
-     * </ol>
-     *
-     * <p>Sanitized to lowercase / 64 chars max for defensive cardinality.
-     *
-     * <p>Package-public so {@link cloud.dnation.jenkins.plugins.hetzner.HungBuildDetector}
-     * can resolve the label without re-implementing the lookup; tests can
-     * shadow it by setting the system property.
-     */
-    public static String masterLabel() {
-        String override = System.getProperty("hetzner.master.label");
-        if (override != null && !override.isEmpty()) {
-            return sanitize(override);
-        }
-        try {
-            jenkins.model.JenkinsLocationConfiguration cfg =
-                    jenkins.model.JenkinsLocationConfiguration.get();
-            if (cfg != null) {
-                String url = cfg.getUrl();
-                if (url != null && !url.isEmpty()) {
-                    return sanitize(deriveMasterFromUrl(url));
-                }
-            }
-        } catch (Throwable ignored) {
-            // JenkinsLocationConfiguration access may fail in unit tests
-            // without a fully-initialized Jenkins controller; fall through.
-        }
-        return "";
-    }
-
-    /**
-     * Extract the master identity from a Jenkins root URL.
-     * Returns the hostname's first label, with {@code .cd} appended when
-     * absent, to align with the {@code <inst>.cd} convention.
-     *
-     * <p>Examples:
-     * <pre>
-     *   "https://rel.cd.percona.com/"  -> "rel.cd"
-     *   "https://pmm.cd.percona.com"   -> "pmm.cd"
-     *   "http://localhost:8080/"       -> "localhost.cd"
-     *   "https://myhost/"              -> "myhost.cd"
-     * </pre>
-     */
-    static String deriveMasterFromUrl(String url) {
-        try {
-            String host = new java.net.URI(url).getHost();
-            if (host == null || host.isEmpty()) {
-                return "";
-            }
-            int dot = host.indexOf('.');
-            String first = dot < 0 ? host : host.substring(0, dot);
-            // If the host's second label is already "cd", surface "<first>.cd"
-            // (e.g. "rel.cd.percona.com" -> "rel.cd"); otherwise append ".cd".
-            if (dot > 0) {
-                String rest = host.substring(dot + 1);
-                int nextDot = rest.indexOf('.');
-                String second = nextDot < 0 ? rest : rest.substring(0, nextDot);
-                if ("cd".equals(second)) {
-                    return first + ".cd";
-                }
-            }
-            return first + ".cd";
-        } catch (java.net.URISyntaxException e) {
-            return "";
-        }
     }
 
     // =====================================================================
@@ -764,6 +698,6 @@ public final class HetznerMetricProvider {
         CLOUD_TEMPLATE_COUNT.clear();
         STUCK_BUILDS_TOTAL.clear();
         OLDEST_BUILD_AGE_SECONDS.clear();
-        EXECUTOR_BUSY_REAL.clear();
+        JENKINS_REAL_BUSY_EXECUTORS.clear();
     }
 }

@@ -23,6 +23,7 @@ import hudson.model.Node;
 import hudson.model.PeriodicWork;
 import hudson.model.Queue;
 import hudson.model.Run;
+import io.prometheus.client.Collector;
 import jenkins.model.Jenkins;
 import lombok.extern.slf4j.Slf4j;
 import org.jenkinsci.Symbol;
@@ -30,9 +31,11 @@ import org.jenkinsci.Symbol;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 /**
  * Detect long-running ("hung") Jenkins builds where {@code Run.isBuilding()}
@@ -46,25 +49,31 @@ import java.util.concurrent.TimeUnit;
  * runs to "finish".
  *
  * <p>This {@link PeriodicWork} ticks every 10 minutes by default, iterates
- * still-building runs across the controller, and emits two new Prometheus
+ * still-building runs across the controller, and emits three Prometheus
  * metrics:
  *
  * <ul>
- *   <li>{@code hetzner_stuck_builds_total{master, template, threshold_hours}}
+ *   <li>{@code hetzner_stuck_builds_total{template, threshold_hours}}
  *       -- Counter incremented exactly once per (build, threshold) when the
  *       build first crosses the configured age threshold. Dedup-cached for
  *       7 days so a single hung build does not double-count across ticks.
- *   <li>{@code hetzner_oldest_build_age_seconds{master, template}} -- Gauge
- *       set on each tick to the max elapsed time among still-building runs,
- *       grouped by Hetzner template.
+ *   <li>{@code hetzner_oldest_build_age_seconds{template}} -- Gauge set on
+ *       each tick to the max elapsed time among still-building runs, grouped
+ *       by Hetzner template. Stale {@code template} children are removed at
+ *       the end of every tick (see {@code clearStaleAgeChildren}) so the
+ *       gauge does not pin to the last-known peak after a hung build finishes.
+ *   <li>{@code hetzner_jenkins_real_busy_executors} -- Gauge of executors
+ *       whose currently-executing {@link Queue.Executable} is a {@link Run}
+ *       with {@link Run#isBuilding()} true. Plugin-side equivalent of the
+ *       CLI's {@code --real} count; renamed in v18 from
+ *       {@code hetzner_executor_busy_real}.
  * </ul>
  *
- * <p>A third metric, {@code hetzner_executor_busy_real{master}}, is also
- * emitted on every tick: the count of executors whose currently-executing
- * {@link Queue.Executable} is a {@link Run} with {@link Run#isBuilding()} true.
- * This is the plugin-side equivalent of the CLI's {@code --real} count and
- * lets {@code readiness}/{@code is-idle} probes hit the Prometheus endpoint
- * directly instead of round-tripping a Groovy snippet through Script Console.
+ * <p>v18 also dropped the in-plugin {@code master} label from all three
+ * metrics: master-side Grafana Alloy injects {@code master="<inst>.cd"} via
+ * relabel config on the push pipeline (ADR 0013), so the plugin-side value
+ * was redundant; the prior empty-string fallback caused dashboards filtering
+ * {@code master=~".+\\.cd"} to silently drop series.
  *
  * <p>The detector is independent of {@link HetznerCloud}: it scans the whole
  * Jenkins controller, not just Hetzner-provisioned agents. The {@code template}
@@ -84,6 +93,16 @@ import java.util.concurrent.TimeUnit;
  *       reschedule, so changes apply at the next tick boundary.
  * </ul>
  *
+ * <h2>Concurrency</h2>
+ *
+ * <p>{@link #scan()} is fully {@code synchronized(this)}. The PeriodicWork
+ * scheduler invokes {@code doRun} sequentially in production, but Jenkins
+ * does not contractually forbid an overlap if a single tick runs longer than
+ * the recurrence period (e.g. an executor walk that hangs on a stuck node
+ * lookup). Two overlapping ticks racing on the {@code seen} dedup map could
+ * double-count {@link HetznerMetricProvider#STUCK_BUILDS_TOTAL}; the
+ * synchronized block keeps that contract honest.
+ *
  * <h2>Failure isolation</h2>
  *
  * <p>{@link #doRun()} wraps {@link #scan()} in a top-level try/catch so a
@@ -91,7 +110,8 @@ import java.util.concurrent.TimeUnit;
  * heavy load) cannot kill the timer. Same pattern as
  * {@link HetznerMetricsRefresher#doRun()} and {@link OrphanedNodesCleaner#doRun()}.
  *
- * @since v103.percona.17
+ * @since v103.percona.17 (v18: synchronized scan, stale gauge cleanup,
+ *        dropped master label, renamed executor_busy_real)
  */
 @Extension
 @Symbol("HungBuildDetector")
@@ -117,14 +137,13 @@ public class HungBuildDetector extends PeriodicWork {
 
     /**
      * Dedup cache for {@link HetznerMetricProvider#STUCK_BUILDS_TOTAL}: key is
-     * {@code master:job:build:thresholdHours}, value is the insertion timestamp
+     * {@code job:build:thresholdHours}, value is the insertion timestamp
      * (millis). We roll our own bounded LinkedHashMap eviction rather than
      * pulling Caffeine because the plugin does not yet depend on it and this
      * use case is too small to justify the new dependency.
      *
-     * <p>Access is single-threaded (only {@link #scan()} writes), so no
-     * synchronization is required for correctness; the field is package-private
-     * for test access.
+     * <p>All access is guarded by {@code synchronized(this)} inside
+     * {@link #scan()}; the field is package-private for test access.
      */
     final Map<String, Long> seen = new LinkedHashMap<>() {
         @Override
@@ -132,6 +151,13 @@ public class HungBuildDetector extends PeriodicWork {
             return size() > DEDUP_MAX_SIZE;
         }
     };
+
+    /**
+     * Clock indirection so unit tests can advance time past
+     * {@link #DEDUP_TTL_MS} without sleeping. Production uses
+     * {@link System#currentTimeMillis}; tests can swap in a fake.
+     */
+    LongSupplier clock = System::currentTimeMillis;
 
     @Override
     public long getRecurrencePeriod() {
@@ -157,12 +183,15 @@ public class HungBuildDetector extends PeriodicWork {
      * Scan all in-flight runs, emit metrics, dedupe stuck-build counter.
      * Package-private so unit tests can drive it directly without depending on
      * the PeriodicWork scheduler.
+     *
+     * <p>{@code synchronized(this)} so overlapping ticks (allowed by Jenkins
+     * PeriodicWork in degenerate cases) cannot race the {@code seen} dedup
+     * map and double-count {@link HetznerMetricProvider#STUCK_BUILDS_TOTAL}.
      */
-    void scan() {
+    synchronized void scan() {
         final long thresholdMs = TimeUnit.HOURS.toMillis(thresholdHours());
         final long thresholdHours = thresholdMs / 3_600_000L;
-        final long now = System.currentTimeMillis();
-        final String master = HetznerMetricProvider.masterLabel();
+        final long now = clock.getAsLong();
 
         // Drop expired dedup entries before we add new ones. Bounded by
         // DEDUP_MAX_SIZE elsewhere; this lets a 7-day-old entry release its
@@ -170,10 +199,10 @@ public class HungBuildDetector extends PeriodicWork {
         seen.entrySet().removeIf(e -> (now - e.getValue()) > DEDUP_TTL_MS);
 
         final Map<String, Long> oldestByTemplate = new HashMap<>();
-        // Track templates touched this tick so we can zero out gauges that
-        // previously fired but have no in-flight runs now. Without this, a
-        // template that finishes its hung build stays pinned to the last
-        // observed age forever.
+        // Track templates touched this tick so we can clear gauge children
+        // for templates that previously had a hung build but do not this
+        // tick. Without this, a template whose hung build finishes leaves the
+        // gauge pinned at the last observed age forever.
         final Set<String> templatesObserved = new HashSet<>();
         int busyReal = 0;
 
@@ -199,13 +228,12 @@ public class HungBuildDetector extends PeriodicWork {
                 oldestByTemplate.merge(template, elapsed, Math::max);
 
                 if (elapsed > thresholdMs) {
-                    final String key = master + ":"
-                            + r.getParent().getFullName() + ":"
+                    final String key = r.getParent().getFullName() + ":"
                             + r.getNumber() + ":"
                             + thresholdHours + "h";
                     if (seen.putIfAbsent(key, now) == null) {
                         HetznerMetricProvider.STUCK_BUILDS_TOTAL
-                                .labels(master, template, Long.toString(thresholdHours))
+                                .labels(template, Long.toString(thresholdHours))
                                 .inc();
                         log.warn("HungBuildDetector: build {}#{} on template '{}' "
                                 + "has been building for {}h (threshold {}h)",
@@ -216,15 +244,49 @@ public class HungBuildDetector extends PeriodicWork {
             }
         }
 
-        // Emit oldest-age gauges. Templates that previously had a hung build
-        // but are clean this tick get zeroed so the gauge does not pin to a
-        // stale peak. The Set-based reset is bounded by the number of unique
-        // templates observed since plugin load.
+        // Emit oldest-age gauges for templates with in-flight builds this tick.
         oldestByTemplate.forEach((tpl, ms) ->
                 HetznerMetricProvider.OLDEST_BUILD_AGE_SECONDS
-                        .labels(master, tpl).set(ms / 1000.0));
+                        .labels(tpl).set(ms / 1000.0));
 
-        HetznerMetricProvider.EXECUTOR_BUSY_REAL.labels(master).set(busyReal);
+        // Clear stale children: any template present in the gauge family but
+        // not observed this tick. Prevents the gauge from pinning to the
+        // last-known peak after a hung build finishes or moves templates.
+        clearStaleAgeChildren(templatesObserved);
+
+        HetznerMetricProvider.JENKINS_REAL_BUSY_EXECUTORS.set(busyReal);
+    }
+
+    /**
+     * Remove gauge children for templates not observed in the current tick.
+     *
+     * <p>Iterates {@link HetznerMetricProvider#OLDEST_BUILD_AGE_SECONDS}'s
+     * existing samples via the simpleclient {@code collect()} API (the only
+     * public way to enumerate label combinations from outside the
+     * {@code io.prometheus.client} package), then calls {@code remove()} on
+     * each child whose {@code template} label is not in
+     * {@code templatesObserved}.
+     */
+    private static void clearStaleAgeChildren(Set<String> templatesObserved) {
+        List<Collector.MetricFamilySamples> families =
+                HetznerMetricProvider.OLDEST_BUILD_AGE_SECONDS.collect();
+        if (families.isEmpty()) {
+            return;
+        }
+        for (Collector.MetricFamilySamples family : families) {
+            for (Collector.MetricFamilySamples.Sample sample : family.samples) {
+                // Single label: "template". Defensive on index to keep this
+                // robust if the label schema is ever extended.
+                int idx = sample.labelNames.indexOf("template");
+                if (idx < 0 || idx >= sample.labelValues.size()) {
+                    continue;
+                }
+                String template = sample.labelValues.get(idx);
+                if (!templatesObserved.contains(template)) {
+                    HetznerMetricProvider.OLDEST_BUILD_AGE_SECONDS.remove(template);
+                }
+            }
+        }
     }
 
     /** Honor the system-property threshold override, with a sane floor. */
