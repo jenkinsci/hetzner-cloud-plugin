@@ -111,7 +111,12 @@ import java.util.function.LongSupplier;
  * {@link HetznerMetricsRefresher#doRun()} and {@link OrphanedNodesCleaner#doRun()}.
  *
  * @since v103.percona.17 (v18: synchronized scan, stale gauge cleanup,
- *        dropped master label, renamed executor_busy_real)
+ *        dropped master label, renamed executor_busy_real; v19: extract Run
+ *        from Pipeline PlaceholderExecutable via reflection so the detector
+ *        sees pipeline node-step executions, not just freestyle builds.
+ *        Pre-v19, all three metrics were silently empty for Pipeline jobs;
+ *        Percona's fleet is 99% Pipeline, so v17/v18 metrics were effectively
+ *        non-functional in production)
  */
 @Extension
 @Symbol("HungBuildDetector")
@@ -209,7 +214,8 @@ public class HungBuildDetector extends PeriodicWork {
         for (Computer c : computers()) {
             for (Executor e : c.getExecutors()) {
                 final Queue.Executable exec = e.getCurrentExecutable();
-                if (!(exec instanceof Run<?, ?> r)) {
+                final Run<?, ?> r = extractRun(exec);
+                if (r == null) {
                     continue;
                 }
                 // Run.isBuilding() is the same signal the CLI's --real flag
@@ -287,6 +293,54 @@ public class HungBuildDetector extends PeriodicWork {
                 }
             }
         }
+    }
+
+    /**
+     * Resolve the {@link Run} that an executor is currently working on.
+     *
+     * <p>Two shapes need to be handled because virtually all Percona builds are
+     * Pipeline jobs (not freestyle):
+     *
+     * <ul>
+     *   <li>Freestyle / Matrix / Maven jobs: {@code currentExecutable} is the
+     *       {@link Run} directly. Pre-v19 logic.
+     *   <li>Pipeline {@code node {}} steps: {@code currentExecutable} is a
+     *       {@code ExecutorStepExecution.PlaceholderTask.PlaceholderExecutable}
+     *       whose {@code getParentExecutable()} returns the building
+     *       {@code WorkflowRun}. v18 missed this case entirely, leaving
+     *       {@code hetzner_jenkins_real_busy_executors} pinned at 0 fleet-wide
+     *       and {@code hetzner_oldest_build_age_seconds} /
+     *       {@code hetzner_stuck_builds_total} non-functional for the
+     *       pipeline-hung-build use case the metrics were built for.
+     * </ul>
+     *
+     * <p>Uses {@link Queue.Executable#getParentExecutable()} directly: it
+     * is part of Jenkins core API (since 2.313), {@code PlaceholderExecutable}
+     * overrides it to return the owning Run, and other shapes inherit the
+     * default {@code null} return. Mirrors the CLI's {@code GROOVY_INCIDENTS}
+     * pattern in {@code rust/jenkins/src/client.rs}.
+     *
+     * @return the building Run, or {@code null} if the executable cannot be
+     *         resolved to one.
+     */
+    static Run<?, ?> extractRun(Queue.Executable exec) {
+        if (exec == null) {
+            return null;
+        }
+        if (exec instanceof Run<?, ?> r) {
+            return r;
+        }
+        try {
+            Queue.Executable parent = exec.getParentExecutable();
+            if (parent instanceof Run<?, ?> pr) {
+                return pr;
+            }
+        } catch (Throwable ignored) {
+            // Defensive: a misbehaving Queue.Executable implementation must
+            // never break the metrics tick. Any failure is treated as
+            // "cannot resolve to a Run".
+        }
+        return null;
     }
 
     /** Honor the system-property threshold override, with a sane floor. */
