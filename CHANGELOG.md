@@ -2,6 +2,32 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.18 (2026-05-18)
+
+Codex review follow-up on v103.percona.17. The new `HungBuildDetector` and its three metrics shipped to ps3.cd as a canary; the review surfaced two correctness blockers and one observability fault that would have made fleet rollout silently misleading. v18 fixes all four before promoting beyond ps3.
+
+### Fixed
+
+- `HungBuildDetector.scan()` is now `synchronized(this)`. The Jenkins `PeriodicWork` scheduler does not contractually forbid overlapping ticks if a single tick runs longer than the recurrence period (e.g. an executor walk that hangs on a stuck node lookup). The v17 implementation mutated the `seen` LinkedHashMap and called `STUCK_BUILDS_TOTAL.inc()` without a lock; two overlapping ticks could double-count a single hung build. Wrapping the whole `scan()` body in `synchronized(this)` keeps the dedup contract honest.
+- `hetzner_oldest_build_age_seconds` now clears stale template children at the end of every tick. v17 populated `templatesObserved` but never used it; once a hung build finished, the gauge stayed pinned at the last observed peak forever, scaring operators into investigating builds that had already completed. New `clearStaleAgeChildren()` reads the family's existing samples via the simpleclient `collect()` API, and calls `Gauge.remove(template)` on any child whose `template` label is not in `templatesObserved` for the current tick.
+
+### Changed
+
+- Dropped the in-plugin `master` label from `hetzner_stuck_builds_total`, `hetzner_oldest_build_age_seconds`, and the renamed `hetzner_jenkins_real_busy_executors` gauge. Per ADR 0013 in the `percona-ci-platform` repo, master-side Grafana Alloy injects `master="<inst>.cd"` via relabel config on the push pipeline, so the plugin-side value was redundant; worse, Alloy's `external_labels` only fill MISSING labels, not existing empty ones, so the v17 fallback (empty string when `JenkinsLocationConfiguration.getUrl()` was unset) emitted series dashboards filtering `master=~".+\\.cd"` would silently drop. Removed `HetznerMetricProvider.masterLabel()` and the helper `deriveMasterFromUrl()` since neither has any other caller. All v16-and-earlier `hetzner_*` metrics already shipped without a plugin-emitted master label; v18 aligns the v17 newcomers with that convention.
+- Renamed `hetzner_executor_busy_real` to `hetzner_jenkins_real_busy_executors`. The original name broke the `hetzner_<domain>_<thing>` convention used by every other Jenkins-side metric in the plugin; the rename keeps the family namespace clean and groups the gauge alongside other `hetzner_jenkins_*` metrics. No live Grafana panel referenced the v17 name yet (panels 210/211 use `hetzner_stuck_builds_total` and `hetzner_oldest_build_age_seconds`), so this is a safe rename.
+
+### Added tests
+
+- `HungBuildDetectorTest.concurrent_scan_does_not_double_count` -- spawns two threads racing on `scan()` with the same stuck build; asserts `STUCK_BUILDS_TOTAL` increments exactly once. Pins the v18 blocker-1 fix.
+- `HungBuildDetectorTest.oldest_age_gauge_clears_when_build_finishes` -- tick 1 has a hung build on `unknown`; tick 2 has no hung builds; asserts the gauge family contains NO samples for `unknown` after tick 2. Pins the v18 blocker-2 fix.
+- `HungBuildDetectorTest.oldest_age_gauge_clears_when_template_no_longer_observed` -- variant where a stale child for `old-tpl` is injected; the next tick must remove it while keeping the current template's child intact.
+- `HungBuildDetectorTest.ttl_expiry_re_arms_dedup` -- injects a fake clock, advances 8 days past the 7-day TTL, and asserts the same hung build re-arms the counter (otherwise a build hung for >7 days would silently stop counting).
+
+### Migration notes
+
+- Any Grafana queries or alerts referencing the `master` label on `hetzner_stuck_builds_total`, `hetzner_oldest_build_age_seconds`, or `hetzner_executor_busy_real` must drop the `master=` filter. Alloy adds the same `master="<inst>.cd"` label downstream via relabel config on the push pipeline, so any external query that previously matched on the in-plugin label keeps working at the Mimir side once that filter is removed (Alloy's value is identical to what the in-plugin helper would have produced when `JenkinsLocationConfiguration.getUrl()` was set).
+- Grafana queries or alerts referencing `hetzner_executor_busy_real` must be updated to `hetzner_jenkins_real_busy_executors`. Within Percona's repos there are no live references to the v17 name; the rename is a pre-emptive cleanup.
+
 ## v103.percona.17 (2026-05-16)
 
 Detect long-running ("hung") builds where `Run.isBuilding()` keeps returning `true` for days, and emit Prometheus metrics so Mimir surfaces the condition before it accretes into a fleet-wide outage.
