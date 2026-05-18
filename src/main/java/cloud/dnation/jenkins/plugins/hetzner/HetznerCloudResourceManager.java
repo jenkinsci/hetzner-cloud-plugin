@@ -53,6 +53,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -591,11 +592,58 @@ public class HetznerCloudResourceManager {
         checkRateLimit("fetchAllServers");
         final String selector = createLabelsForServer(cloudName).entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
                 .collect(Collectors.joining(","));
-        List<ServerDetail> servers = Collections.unmodifiableList(
-                PagedResourceHelper.getAllServers(proxy(), selector));
+        final List<ServerDetail> raw = PagedResourceHelper.getAllServers(proxy(), selector);
+        final List<ServerDetail> servers = Collections.unmodifiableList(dedupServersByName(raw));
         SERVER_LIST_CACHE.put(cloudName, servers);
-        log.debug("Server list fetched and cached for cloud={} ({} servers, remaining={})",
-                cloudName, servers.size(), apiClient().getRemaining());
+        if (raw.size() != servers.size()) {
+            log.debug("Server list fetched and cached for cloud={} ({} raw, {} unique after dedup, remaining={})",
+                    cloudName, raw.size(), servers.size(), apiClient().getRemaining());
+        } else {
+            log.debug("Server list fetched and cached for cloud={} ({} servers, remaining={})",
+                    cloudName, servers.size(), apiClient().getRemaining());
+        }
         return servers;
+    }
+
+    /**
+     * Deduplicate a server list by {@code name}, preserving first occurrence.
+     *
+     * <p>Workaround for the upstream
+     * <a href="https://github.com/dNationCloud/hetzner-cloud-client-java/blob/release/1.12.0/src/main/java/cloud/dnation/hetznerclient/PagedResourceHelper.java">PagedResourceHelper</a>
+     * pagination bug (present in our pinned 1.10.0 AND in latest 1.12.0):
+     * the loop starts page index at 0, but Hetzner's API uses
+     * 1-based pagination, so {@code page=0} returns page 1 and the next
+     * iteration {@code page=1} returns page 1 again, duplicating every record
+     * on the first page. Observed in production on cloud.cd as 35 unique
+     * servers returned 60 raw entries, inflating
+     * {@code hetzner_running_servers} by ~1.7x and silently rejecting
+     * legitimate provisions when the inflated count crossed
+     * {@code instance_cap} (false {@code cap_reached_under_lock} outcomes).
+     *
+     * <p>Dedup here is the single source of truth for every downstream
+     * consumer (runningNodeCount, OrphanedNodesCleaner, the under-lock
+     * cap recheck at {@link #createServer}, the metrics refresher) so one
+     * fix closes every path. {@code LinkedHashMap.putIfAbsent} preserves
+     * insertion order so the first occurrence wins.
+     *
+     * <p>Hetzner enforces server-name uniqueness per project, so name is a
+     * safe dedup key. Null entries and null names are filtered defensively;
+     * a malformed entry in the API response should not blow up the metrics
+     * tick or the orphan-cleanup scan.
+     *
+     * <p>Package-private for direct unit-test access (no need to mock the
+     * upstream {@code PagedResourceHelper} or the {@code SERVER_LIST_CACHE}).
+     */
+    static List<ServerDetail> dedupServersByName(List<ServerDetail> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return new ArrayList<>();
+        }
+        final Map<String, ServerDetail> byName = new LinkedHashMap<>();
+        for (ServerDetail s : raw) {
+            if (s != null && s.getName() != null) {
+                byName.putIfAbsent(s.getName(), s);
+            }
+        }
+        return new ArrayList<>(byName.values());
     }
 }
