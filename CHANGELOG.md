@@ -2,6 +2,47 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.22 (2026-05-19)
+
+Phase 4b of the ps3 canary resilience plan ([PS-11173](https://perconadev.atlassian.net/browse/PS-11173)). After a master JVM restart, the plugin now re-adopts the master's own Hetzner VMs as Jenkins agents via Hetzner label selector, instead of letting `OrphanedNodesCleaner` reap them. This closes the failure class where every in-flight build was lost on a kill -9 / spot interrupt even though the Hetzner VMs themselves had survived. ps3-only canary; default-off on every other master.
+
+### Added
+
+- `HetznerWorkerRehydrator.rehydrate()` runs as `@Initializer(after=JOB_LOADED, before=COMPLETED)`. For each configured `HetznerCloud`, it enumerates VMs via `fetchAllServers(cloudName)` (selector: `jenkins.io/managed-by=hetzner-jenkins-plugin,jenkins.io/cloud-name=<cloud>`), matches each VM to a `HetznerServerTemplate`, and `Jenkins.addNode`s a reconstructed `HetznerServerAgent`. Per-VM errors are caught and counted; the pass never bubbles to the boot sequence. Single INFO summary per cloud: `rehydrated N/M VMs (skipped_existing=..., no_match=..., ambiguous=..., other=...)`.
+- `HetznerConstants.LABEL_TEMPLATE_NAME = "jenkins.io/template-name"`. Written at provision time so the rehydrator can match a VM to its template with one exact lookup instead of falling back to the heuristic.
+- Heuristic fallback for VMs provisioned before v103.percona.22 (no `template-name` label): match by Hetzner serverType + datacenter/location + name prefix. Ambiguous matches log WARN, increment `rehydrate_failures_total{reason=ambiguous}`, and skip the VM.
+- Idempotency guard: skip VMs whose name already has a `Jenkins.get().getNode(...)` entry, so a re-entrant call cannot double-add.
+
+### Changed
+
+- `HetznerCloudResourceManager.createLabelsForServer` accepts an optional `templateName`; the new label lands on VMs provisioned in v103.percona.22+. `fetchAllServers` keeps the existing two-label selector (cloud-name only) so the same query matches both legacy and v103.percona.22+ VMs.
+- `ControllerListener.onOnline` defers `OrphanedNodesCleaner.doCleanup()` by `hetzner.rehydrate.grace-period-minutes` (default 5) when `-Dhetzner.rehydrate.enabled=true`. Otherwise the cleanup runs immediately as before. The defer gives the rehydrate pass time to re-adopt VMs before they are evaluated against the empty Jenkins-node list.
+
+### Feature flag
+
+- `-Dhetzner.rehydrate.enabled=true` to enable both the rehydrate `@Initializer` and the controller-online cleanup defer. Default `false`; ps3 master JVM args are the only opt-in for the canary.
+- `-Dhetzner.rehydrate.grace-period-minutes=<n>` to override the 5-minute defer (consulted only when the feature is on).
+
+### Compatibility
+
+- Fresh upgrade from v103.percona.21: no migration. Without the flag the new code paths are dormant.
+- Downgrade to v103.percona.21: VMs provisioned in v103.percona.22+ keep the `template-name` label, which prior versions ignore. Safe rollback.
+
+### Design decision: no external shared state
+
+Three independent reviews (2 opus subagents + codex gpt-5.5 xhigh) converged: Phase 4b does not need DynamoDB. The `jenkins.io/cloud-name=<master>` label is a hard partition; each master rehydrates only its own VMs. Every piece of state needed at rehydrate is recoverable locally (Hetzner labels + Jenkins credentials on persistent EBS + in-memory template list). PS-11177 remains the home for any future cross-master shared state.
+
+### Added tests
+
+- `HetznerWorkerRehydratorTest` covering the matching logic: exact label match, heuristic by serverType + location + prefix, datacenter-vs-location forms, ambiguous twins, prefix disambiguation, no-match, stale-label fallthrough, empty/null template list. End-to-end validation lives on ps3 (kill -9 + boot log + node count + counters).
+
+### Added metrics
+
+- `hetzner_rehydrated_workers{cloud}` (gauge) - agents rehydrated on the most recent pass.
+- `hetzner_rehydrate_attempts_total{cloud}` (counter) - VMs evaluated.
+- `hetzner_rehydrate_successes_total{cloud,template}` (counter).
+- `hetzner_rehydrate_failures_total{cloud,reason}` (counter) - reason in {`no_match`, `ambiguous`, `name_collision`, `add_node`, `other`}.
+
 ## v103.percona.21 (2026-05-19)
 
 Phase 4a of the ps3 canary resilience plan ([PS-11173](https://perconadev.atlassian.net/browse/PS-11173)). DC circuit-breaker state now survives a Jenkins JVM restart, which closes the failure class where a fresh master after spot interrupt would re-attempt every breaker as CLOSED and stampede a still-sick DC.

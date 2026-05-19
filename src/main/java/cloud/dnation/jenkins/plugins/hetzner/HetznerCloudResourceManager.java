@@ -82,10 +82,22 @@ public class HetznerCloudResourceManager {
         return new HetznerCloudResourceManager(credentialsId);
     }
 
-    private static Map<String, String> createLabelsForServer(String cloudName) {
+    /**
+     * Build the label set applied to a Hetzner server at provisioning time.
+     * The {@code templateName} hint is optional: when non-null and non-empty,
+     * the resulting map includes {@link HetznerConstants#LABEL_TEMPLATE_NAME}
+     * so the rehydrate path on master restart can bind a VM back to its
+     * template without the (serverType + location + prefix) heuristic.
+     * Pass {@code null} when building the selector for {@code fetchAllServers}
+     * so the query still matches VMs provisioned before v103.percona.22.
+     */
+    private static Map<String, String> createLabelsForServer(String cloudName, String templateName) {
         final LinkedHashMap<String, String> ret = new LinkedHashMap<>();
         ret.put(HetznerConstants.LABEL_MANAGED_BY, LABEL_VALUE_PLUGIN);
         ret.put(HetznerConstants.LABEL_CLOUD_NAME, cloudName);
+        if (templateName != null && !templateName.isEmpty()) {
+            ret.put(HetznerConstants.LABEL_TEMPLATE_NAME, templateName);
+        }
         return ret;
     }
 
@@ -538,7 +550,7 @@ public class HetznerCloudResourceManager {
             } else {
                 createServerRequest.setLocation(template.getLocation());
             }
-            createServerRequest.setLabels(createLabelsForServer(template.getCloud().name));
+            createServerRequest.setLabels(createLabelsForServer(template.getCloud().name, template.getName()));
             if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC_V6 || ct == ConnectivityType.PUBLIC) {
                 Optional.of(template.getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
             }
@@ -590,7 +602,10 @@ public class HetznerCloudResourceManager {
         }
 
         checkRateLimit("fetchAllServers");
-        final String selector = createLabelsForServer(cloudName).entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
+        // templateName=null in the selector so the query matches both
+        // v103.percona.22+ VMs (with LABEL_TEMPLATE_NAME) and legacy VMs.
+        final String selector = createLabelsForServer(cloudName, null).entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue())
                 .collect(Collectors.joining(","));
         final List<ServerDetail> raw = PagedResourceHelper.getAllServers(proxy(), selector);
         final List<ServerDetail> servers = Collections.unmodifiableList(dedupServersByName(raw));

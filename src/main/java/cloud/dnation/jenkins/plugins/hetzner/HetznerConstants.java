@@ -45,6 +45,15 @@ public class HetznerConstants {
     public static final String LABEL_CLOUD_NAME = LABEL_NS + "cloud-name";
 
     /**
+     * Name of label for template that provisioned the server. Read by the
+     * rehydrate path on master restart to bind a VM back to its template
+     * without falling back to the (serverType + location + prefix) heuristic.
+     * VMs provisioned before v103.percona.22 do not carry this label; the
+     * rehydrator falls back to the heuristic for those.
+     */
+    public static final String LABEL_TEMPLATE_NAME = LABEL_NS + "template-name";
+
+    /**
      * Name of label for all objects managed by this plugin.
      */
     public static final String LABEL_MANAGED_BY = LABEL_NS + "managed-by";

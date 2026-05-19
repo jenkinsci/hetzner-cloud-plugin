@@ -334,6 +334,64 @@ public final class HetznerMetricProvider {
             .register();
 
     // =====================================================================
+    // Worker rehydrate (PS-11173 Phase 4b, v103.percona.22)
+    // =====================================================================
+
+    /** Reason codes for {@link #REHYDRATE_FAILURES} — keep cardinality bounded. */
+    public static final String REHYDRATE_REASON_NO_MATCH = "no_match";
+    public static final String REHYDRATE_REASON_AMBIGUOUS = "ambiguous";
+    public static final String REHYDRATE_REASON_NAME_COLLISION = "name_collision";
+    public static final String REHYDRATE_REASON_ADD_NODE = "add_node";
+    public static final String REHYDRATE_REASON_OTHER = "other";
+
+    /**
+     * Agents re-adopted by {@code HetznerWorkerRehydrator.rehydrate()} on the
+     * most recent JVM start. Gauge: reflects the last pass count, not a
+     * cumulative total. Zero on a fresh install or when the feature flag is off.
+     */
+    public static final Gauge REHYDRATED_WORKERS = Gauge.build()
+            .name("hetzner_rehydrated_workers")
+            .help("Agents rehydrated on the most recent rehydrate pass")
+            .labelNames("cloud")
+            .register();
+
+    /**
+     * VMs evaluated by the rehydrate pass (regardless of outcome). Counts
+     * the size of {@code fetchAllServers} per cloud across JVM lifetimes.
+     */
+    public static final Counter REHYDRATE_ATTEMPTS = Counter.build()
+            .name("hetzner_rehydrate_attempts_total")
+            .help("Hetzner VMs evaluated by the rehydrate pass")
+            .labelNames("cloud")
+            .register();
+
+    /**
+     * VMs that were successfully bound to a matching template and re-added
+     * to Jenkins as agents. Labeled by template so post-restart adoption
+     * volume can be tracked per worker class.
+     */
+    public static final Counter REHYDRATE_SUCCESSES = Counter.build()
+            .name("hetzner_rehydrate_successes_total")
+            .help("Hetzner VMs successfully rehydrated as Jenkins agents")
+            .labelNames("cloud", "template")
+            .register();
+
+    /**
+     * VMs that the rehydrate pass could not adopt, broken down by reason.
+     * {@code no_match} and {@code ambiguous} cover the template-matching
+     * failures; {@code name_collision} means a node with the VM's name
+     * already exists (idempotency skip is logged but not counted, so this
+     * is reserved for a real collision with a non-rehydrate-managed node);
+     * {@code add_node} is a Jenkins-side IOException; {@code other} is the
+     * catch-all.
+     */
+    public static final Counter REHYDRATE_FAILURES = Counter.build()
+            .name("hetzner_rehydrate_failures_total")
+            .help("Hetzner VMs that could not be rehydrated by the rehydrate pass")
+            .labelNames("cloud", "reason")
+            .register();
+
+    // =====================================================================
     // Orphan / ghost cleanup
     // =====================================================================
 
@@ -722,6 +780,10 @@ public final class HetznerMetricProvider {
         DC_HEALTH_SAVES.clear();
         DC_HEALTH_SAVE_FAILURES.clear();
         DC_HEALTH_STALE_OPEN_RESETS.clear();
+        REHYDRATED_WORKERS.clear();
+        REHYDRATE_ATTEMPTS.clear();
+        REHYDRATE_SUCCESSES.clear();
+        REHYDRATE_FAILURES.clear();
         ORPHAN_REAPED.clear();
         GHOST_REMOVED.clear();
         ORPHAN_CLEANUP_ERRORS.clear();
