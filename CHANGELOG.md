@@ -2,6 +2,31 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.21 (2026-05-19)
+
+Phase 4a of the ps3 canary resilience plan ([PS-11173](https://perconadev.atlassian.net/browse/PS-11173)). DC circuit-breaker state now survives a Jenkins JVM restart, which closes the failure class where a fresh master after spot interrupt would re-attempt every breaker as CLOSED and stampede a still-sick DC.
+
+### Added
+
+- `DcHealthTracker.load()` reads `$JENKINS_HOME/hetzner-dc-health.xml` at `@Initializer(after=PLUGINS_STARTED)` and rehydrates the in-memory `BREAKERS` map. Missing file is a silent no-op so a clean install or a downgrade to v103.percona.20 is unaffected.
+- `DcHealthTracker.save()` schedules a write via `jenkins.util.Timer.get()` whenever `recordFailure` or `recordSuccess` mutates state. An `AtomicBoolean` coalesces concurrent triggers so a burst produces a single write. Deferring to `Timer` keeps disk I/O off the `synchronized` breaker lock.
+- `DcCircuitBreaker.afterLoad(fallbackLocation, now, staleOpenTtlMs)` runs on every breaker after deserialization to restore Prometheus gauges and apply a 30-min TTL: an `OPEN` breaker whose `openedAt` is older than 30 min loads as `CLOSED` with zero consecutive failures, so a transient incident from before the restart does not pin a DC out of rotation.
+- `@XStreamAlias("dcCircuitBreaker")` on `DcCircuitBreaker` for a stable XML schema even if the class is later moved across packages.
+
+### Changed
+
+- `DcCircuitBreaker.location` is no longer `final`. XStream deserialization assigns it directly, and `afterLoad()` can fall back to the persisted map key if older XML omits the field. The `@Getter` and all `synchronized` accessors are unchanged.
+
+### Compatibility
+
+- Fresh upgrade from v103.percona.20: no migration needed; the XML file is created on first `recordFailure`/`recordSuccess` after upgrade.
+- Downgrade to v103.percona.20: the leftover `hetzner-dc-health.xml` is ignored (the prior version never reads it). Safe rollback path.
+- Persistence skips silently when `Jenkins.getInstanceOrNull()` returns `null` so existing unit tests that mock `Jenkins.get()` without stubbing `getRootDir()` continue to pass without touching the persistence layer.
+
+### Added tests
+
+- `DcHealthPersistenceTest` covering `savesOnFailure`, `loadsOnInit`, `ttl_resetsStaleOpen`, `missingFile_isNoOp`.
+
 ## v103.percona.18 (2026-05-18)
 
 Codex review follow-up on v103.percona.17. The new `HungBuildDetector` and its three metrics shipped to ps3.cd as a canary; the review surfaced two correctness blockers and one observability fault that would have made fleet rollout silently misleading. v18 fixes all four before promoting beyond ps3.

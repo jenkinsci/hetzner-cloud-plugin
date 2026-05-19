@@ -6,10 +6,12 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
+import com.thoughtworks.xstream.annotations.XStreamAlias;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@XStreamAlias("dcCircuitBreaker")
 class DcCircuitBreaker {
 
     enum State { CLOSED, OPEN, HALF_OPEN }
@@ -17,8 +19,11 @@ class DcCircuitBreaker {
     private static final int FAILURE_THRESHOLD = 2;
     private static final long RESET_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+    // Not final: XStream deserialization assigns fields directly, and
+    // afterLoad() may fill in a fallback location from the persisted map key
+    // if older XML omitted it.
     @Getter
-    private final String location;
+    private String location;
     private State state = State.CLOSED;
     private int consecutiveFailures = 0;
     private long openedAt = 0;
@@ -135,6 +140,28 @@ class DcCircuitBreaker {
 
     synchronized long getLastFailureAt() {
         return lastFailureAt;
+    }
+
+    /**
+     * Post-deserialization hook called from {@link DcHealthTracker#load()}.
+     * Restores the Prometheus gauges that are not persisted (so dashboards
+     * render the loaded state right after master boot) and applies the
+     * stale-OPEN TTL so an old transient outage does not pin a DC out of
+     * rotation after a long restart.
+     */
+    synchronized void afterLoad(String fallbackLocation, long now, long staleOpenTtlMs) {
+        if (location == null) {
+            location = fallbackLocation;
+        }
+        if (state == State.OPEN && now - openedAt >= staleOpenTtlMs) {
+            log.info("DC {} circuit breaker: OPEN -> CLOSED on load (stale, last failure {}ms ago)",
+                    location, now - openedAt);
+            state = State.CLOSED;
+            consecutiveFailures = 0;
+            openedAt = 0;
+        }
+        HetznerMetricProvider.DC_BREAKER_STATE.labels(location).set(state.ordinal());
+        HetznerMetricProvider.DC_BREAKER_CONSECUTIVE_FAILURES.labels(location).set(consecutiveFailures);
     }
 
     /** Visible for testing. */
