@@ -27,6 +27,13 @@ Phase 4a of the ps3 canary resilience plan ([PS-11173](https://perconadev.atlass
 
 - `DcHealthPersistenceTest` covering `savesOnFailure`, `loadsOnInit`, `ttl_resetsStaleOpen`, `missingFile_isNoOp`.
 
+### Added metrics
+
+- `hetzner_dc_health_loaded_breakers` (gauge) - number of breakers restored on the most recent `DcHealthTracker.load()` call.
+- `hetzner_dc_health_saves_total` (counter) - successful XmlFile writes.
+- `hetzner_dc_health_save_failures_total` (counter) - failed writes; non-zero rate is operationally actionable.
+- `hetzner_dc_health_stale_open_resets_total{location}` (counter) - breakers reset from OPEN to CLOSED on load due to the 30-min stale-OPEN TTL.
+
 ## v103.percona.18 (2026-05-18)
 
 Codex review follow-up on v103.percona.17. The new `HungBuildDetector` and its three metrics shipped to ps3.cd as a canary; the review surfaced two correctness blockers and one observability fault that would have made fleet rollout silently misleading. v18 fixes all four before promoting beyond ps3.

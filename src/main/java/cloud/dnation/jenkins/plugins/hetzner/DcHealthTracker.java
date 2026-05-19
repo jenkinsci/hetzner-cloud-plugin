@@ -12,6 +12,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import hudson.BulkChange;
 import hudson.XmlFile;
 import hudson.init.InitMilestone;
@@ -62,6 +63,7 @@ public class DcHealthTracker {
                         BREAKERS.put(location, breaker);
                     }
                 });
+                HetznerMetricProvider.DC_HEALTH_LOADED_BREAKERS.set(BREAKERS.size());
                 log.info("Hetzner DC health state loaded from {}: {} breakers",
                         xml.getFile(), BREAKERS.size());
             }
@@ -177,7 +179,9 @@ public class DcHealthTracker {
             Timer.get().submit(() -> {
                 try {
                     new Store(BREAKERS).save();
+                    HetznerMetricProvider.DC_HEALTH_SAVES.inc();
                 } catch (IOException | RuntimeException e) {
+                    HetznerMetricProvider.DC_HEALTH_SAVE_FAILURES.inc();
                     log.warn("Failed to save Hetzner DC health state", e);
                 } finally {
                     SAVE_SCHEDULED.set(false);

@@ -288,6 +288,51 @@ public final class HetznerMetricProvider {
             .labelNames("from_dc", "to_dc")
             .register();
 
+    /**
+     * Number of DC breakers loaded from {@code $JENKINS_HOME/hetzner-dc-health.xml}
+     * on the most recent {@code DcHealthTracker.load()} call. Set once at
+     * {@code @Initializer(after=PLUGINS_STARTED)}. Zero on a fresh install
+     * or after a clean run with no failures.
+     */
+    public static final Gauge DC_HEALTH_LOADED_BREAKERS = Gauge.build()
+            .name("hetzner_dc_health_loaded_breakers")
+            .help("DC breakers restored from disk at the most recent JVM start")
+            .register();
+
+    /**
+     * Successful persistence writes of the DC breaker map. Bursts are
+     * coalesced via an AtomicBoolean so this counter increments at most
+     * once per {@code Timer.get()} tick that observed a pending change.
+     * Useful for confirming the persistence path is firing in production.
+     */
+    public static final Counter DC_HEALTH_SAVES = Counter.build()
+            .name("hetzner_dc_health_saves_total")
+            .help("Successful DC breaker state writes to hetzner-dc-health.xml")
+            .register();
+
+    /**
+     * Persistence write failures. Any non-zero rate is operationally
+     * actionable: disk full, $JENKINS_HOME unreachable, XStream serialization
+     * regression. Should alert.
+     */
+    public static final Counter DC_HEALTH_SAVE_FAILURES = Counter.build()
+            .name("hetzner_dc_health_save_failures_total")
+            .help("DC breaker state writes that failed (IOException or runtime)")
+            .register();
+
+    /**
+     * Breakers whose {@code OPEN} state on disk was older than the
+     * stale-OPEN TTL and reset to {@code CLOSED} on load. Tracks how often
+     * we cleanly recover from a transient incident across a master
+     * restart. Increment fires inside
+     * {@code DcCircuitBreaker.afterLoad()}.
+     */
+    public static final Counter DC_HEALTH_STALE_OPEN_RESETS = Counter.build()
+            .name("hetzner_dc_health_stale_open_resets_total")
+            .help("DC breakers reset from OPEN to CLOSED on load due to stale-OPEN TTL")
+            .labelNames("location")
+            .register();
+
     // =====================================================================
     // Orphan / ghost cleanup
     // =====================================================================
@@ -673,6 +718,10 @@ public final class HetznerMetricProvider {
         DC_BREAKER_CONSECUTIVE_FAILURES.clear();
         DC_BREAKER_TRANSITIONS.clear();
         DC_FAILOVER.clear();
+        DC_HEALTH_LOADED_BREAKERS.clear();
+        DC_HEALTH_SAVES.clear();
+        DC_HEALTH_SAVE_FAILURES.clear();
+        DC_HEALTH_STALE_OPEN_RESETS.clear();
         ORPHAN_REAPED.clear();
         GHOST_REMOVED.clear();
         ORPHAN_CLEANUP_ERRORS.clear();

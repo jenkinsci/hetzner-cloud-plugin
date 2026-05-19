@@ -11,6 +11,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import hudson.XmlFile;
 import jenkins.model.Jenkins;
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +38,7 @@ class DcHealthPersistenceTest {
     void setUp(JenkinsRule rule) {
         j = rule;
         DcHealthTracker.resetAll();
+        HetznerMetricProvider.resetForTest();
         File xml = new File(j.jenkins.getRootDir(), "hetzner-dc-health.xml");
         if (xml.exists() && !xml.delete()) {
             throw new IllegalStateException("Could not delete leftover " + xml);
@@ -63,6 +65,11 @@ class DcHealthPersistenceTest {
         File xml = new File(j.jenkins.getRootDir(), "hetzner-dc-health.xml");
         await().atMost(10, TimeUnit.SECONDS).until(xml::exists);
         assertTrue(xml.length() > 0, "xml file should not be empty");
+
+        await().atMost(5, TimeUnit.SECONDS).until(
+                () -> HetznerMetricProvider.DC_HEALTH_SAVES.get() >= 1);
+        assertEquals(0.0, HetznerMetricProvider.DC_HEALTH_SAVE_FAILURES.get(),
+                "no save failures expected on the happy path");
     }
 
     /**

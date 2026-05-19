@@ -159,6 +159,7 @@ class DcCircuitBreaker {
             state = State.CLOSED;
             consecutiveFailures = 0;
             openedAt = 0;
+            HetznerMetricProvider.DC_HEALTH_STALE_OPEN_RESETS.labels(location).inc();
         }
         HetznerMetricProvider.DC_BREAKER_STATE.labels(location).set(state.ordinal());
         HetznerMetricProvider.DC_BREAKER_CONSECUTIVE_FAILURES.labels(location).set(consecutiveFailures);
