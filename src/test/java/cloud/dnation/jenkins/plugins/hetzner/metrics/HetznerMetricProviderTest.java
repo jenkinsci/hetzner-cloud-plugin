@@ -110,8 +110,16 @@ class HetznerMetricProviderTest {
 
     @Test
     void runningServersGaugeReflectsSetCalls() {
-        HetznerMetricProvider.RUNNING_SERVERS.labels("test-cloud").set(7);
-        assertEquals(7.0, sample("hetzner_running_servers", "cloud", "test-cloud"));
+        HetznerMetricProvider.RUNNING_SERVERS.labels("test-cloud",
+                HetznerMetricProvider.ARCH_AMD64).set(7);
+        HetznerMetricProvider.RUNNING_SERVERS.labels("test-cloud",
+                HetznerMetricProvider.ARCH_ARM64).set(3);
+        assertEquals(7.0, sample("hetzner_running_servers",
+                new String[]{"cloud", "arch"},
+                new String[]{"test-cloud", "amd64"}));
+        assertEquals(3.0, sample("hetzner_running_servers",
+                new String[]{"cloud", "arch"},
+                new String[]{"test-cloud", "arm64"}));
     }
 
     @Test
@@ -220,10 +228,17 @@ class HetznerMetricProviderTest {
 
     @Test
     void orphanReapedAndGhostRemovedCountersIncrement() {
-        HetznerMetricProvider.ORPHAN_REAPED.labels("hetzner-cloud").inc();
+        HetznerMetricProvider.ORPHAN_REAPED.labels("hetzner-cloud",
+                HetznerMetricProvider.ARCH_AMD64).inc();
+        HetznerMetricProvider.ORPHAN_REAPED.labels("hetzner-cloud",
+                HetznerMetricProvider.ARCH_ARM64).inc();
         HetznerMetricProvider.GHOST_REMOVED.labels("hetzner-cloud").inc();
         assertEquals(1.0, sample("hetzner_orphan_servers_reaped_total",
-                "cloud", "hetzner-cloud"));
+                new String[]{"cloud", "arch"},
+                new String[]{"hetzner-cloud", "amd64"}));
+        assertEquals(1.0, sample("hetzner_orphan_servers_reaped_total",
+                new String[]{"cloud", "arch"},
+                new String[]{"hetzner-cloud", "arm64"}));
         assertEquals(1.0, sample("hetzner_ghost_nodes_removed_total",
                 "cloud", "hetzner-cloud"));
     }
@@ -487,6 +502,45 @@ class HetznerMetricProviderTest {
                     "expected metric family not registered: " + name
                             + " (also tried: " + baseFamily + ")");
         }
+    }
+
+    // ---- Architecture label helper (v103.percona.23) ---------------------
+
+    @Test
+    void archOf_mapsCpxFamilyToAmd64() {
+        assertEquals(HetznerMetricProvider.ARCH_AMD64, HetznerMetricProvider.archOf("cpx42"));
+        assertEquals(HetznerMetricProvider.ARCH_AMD64, HetznerMetricProvider.archOf("cpx62"));
+        assertEquals(HetznerMetricProvider.ARCH_AMD64, HetznerMetricProvider.archOf("CPX22"));
+    }
+
+    @Test
+    void archOf_mapsCaxFamilyToArm64() {
+        assertEquals(HetznerMetricProvider.ARCH_ARM64, HetznerMetricProvider.archOf("cax31"));
+        assertEquals(HetznerMetricProvider.ARCH_ARM64, HetznerMetricProvider.archOf("cax41"));
+        assertEquals(HetznerMetricProvider.ARCH_ARM64, HetznerMetricProvider.archOf("CAX21"));
+    }
+
+    @Test
+    void archOf_mapsLegacyCxAndCcxFamiliesToAmd64() {
+        // cx* (legacy Intel) and ccx* (dedicated AMD64) both pre-date the
+        // cpx/cax naming and are still occasionally available.
+        assertEquals(HetznerMetricProvider.ARCH_AMD64, HetznerMetricProvider.archOf("cx11"));
+        assertEquals(HetznerMetricProvider.ARCH_AMD64, HetznerMetricProvider.archOf("ccx13"));
+    }
+
+    @Test
+    void archOf_unrecognisedOrEmptyMapsToUnknown() {
+        assertEquals(HetznerMetricProvider.ARCH_UNKNOWN, HetznerMetricProvider.archOf(null));
+        assertEquals(HetznerMetricProvider.ARCH_UNKNOWN, HetznerMetricProvider.archOf(""));
+        assertEquals(HetznerMetricProvider.ARCH_UNKNOWN, HetznerMetricProvider.archOf("foo99"));
+    }
+
+    @Test
+    void knownArchsCoversAllEmittedValues() {
+        assertTrue(HetznerMetricProvider.KNOWN_ARCHS.contains(HetznerMetricProvider.ARCH_AMD64));
+        assertTrue(HetznerMetricProvider.KNOWN_ARCHS.contains(HetznerMetricProvider.ARCH_ARM64));
+        assertTrue(HetznerMetricProvider.KNOWN_ARCHS.contains(HetznerMetricProvider.ARCH_UNKNOWN));
+        assertEquals(3, HetznerMetricProvider.KNOWN_ARCHS.size());
     }
 
     // ---- Helpers ---------------------------------------------------------

@@ -125,7 +125,11 @@ public class OrphanedNodesCleaner extends PeriodicWork {
             // unconditionally falsely reports recovery while servers stay alive.
             boolean reaped = cloud.getResourceManager().destroyServer(serverDetail);
             if (reaped) {
-                HetznerMetricProvider.ORPHAN_REAPED.labels(cloud.name).inc();
+                final String arch = HetznerMetricProvider.archOf(
+                        serverDetail.getServerType() != null
+                                ? serverDetail.getServerType().getName()
+                                : null);
+                HetznerMetricProvider.ORPHAN_REAPED.labels(cloud.name, arch).inc();
             } else {
                 log.warn("Orphan termination failed for server {} (id={}, cloud={}); "
                         + "will retry on next cycle",

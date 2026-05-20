@@ -16,6 +16,7 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.ServerDetail;
+import cloud.dnation.hetznerclient.ServerType;
 import cloud.dnation.jenkins.plugins.hetzner.metrics.HetznerMetricProvider;
 import hudson.model.labels.LabelAtom;
 import jenkins.model.Jenkins;
@@ -84,6 +85,11 @@ class HetznerMetricsRefresherTest {
      * The whole point of the refresher: when the cloud is idle and nothing has
      * called provision() in a while, refreshMetrics() must re-emit a fresh
      * count straight from the Hetzner API into the RUNNING_SERVERS gauge.
+     *
+     * <p>v103.percona.23: the gauge is now arch-labelled. Test servers
+     * created via {@link #serverWithStatus(String)} have no serverType set,
+     * so they collapse to the "unknown" bucket. Per-arch grouping is
+     * exercised separately in {@link #refreshMetrics_splitsByArch}.
      */
     @Test
     void refreshMetrics_emitsLiveServerCountToGauge() throws Exception {
@@ -92,7 +98,7 @@ class HetznerMetricsRefresherTest {
         HetznerCloud cloud = new HetznerCloud("hcloud-test", "mock-creds", "10", new ArrayList<>());
         cloud.refreshMetrics();
 
-        double emitted = HetznerMetricProvider.RUNNING_SERVERS.labels("hcloud-test").get();
+        double emitted = sumRunningAcrossArchs("hcloud-test");
         assertEquals(2.0, emitted, 0.0001, "RUNNING_SERVERS gauge should reflect live API count");
         verify(rsrcMgr, times(1)).fetchAllServers("hcloud-test");
     }
@@ -114,9 +120,40 @@ class HetznerMetricsRefresherTest {
         HetznerCloud cloud = new HetznerCloud("hcloud-test", "mock-creds", "10", new ArrayList<>());
         cloud.refreshMetrics();
 
-        double emitted = HetznerMetricProvider.RUNNING_SERVERS.labels("hcloud-test").get();
+        double emitted = sumRunningAcrossArchs("hcloud-test");
         assertTrue(emitted == 2.0 || emitted == 3.0,
                 "Only RUNNABLE state servers counted; got " + emitted);
+    }
+
+    /**
+     * v103.percona.23: running servers are emitted per arch derived from
+     * Hetzner serverType (cpx* -> amd64, cax* -> arm64). Verifies the
+     * grouping logic plus the explicit zero-emission for archs with no
+     * running servers (otherwise stale series pin to their last non-zero
+     * value in Mimir).
+     */
+    @Test
+    void refreshMetrics_splitsByArch() throws Exception {
+        List<ServerDetail> mixed = new ArrayList<>();
+        mixed.add(serverWithType("cpx42"));
+        mixed.add(serverWithType("cpx62"));
+        mixed.add(serverWithType("cpx22"));
+        mixed.add(serverWithType("cax31"));
+        when(rsrcMgr.fetchAllServers(anyString())).thenReturn(mixed);
+
+        HetznerCloud cloud = new HetznerCloud("hcloud-test", "mock-creds", "10", new ArrayList<>());
+        cloud.refreshMetrics();
+
+        double amd = HetznerMetricProvider.RUNNING_SERVERS
+                .labels("hcloud-test", HetznerMetricProvider.ARCH_AMD64).get();
+        double arm = HetznerMetricProvider.RUNNING_SERVERS
+                .labels("hcloud-test", HetznerMetricProvider.ARCH_ARM64).get();
+        double unknown = HetznerMetricProvider.RUNNING_SERVERS
+                .labels("hcloud-test", HetznerMetricProvider.ARCH_UNKNOWN).get();
+        assertEquals(3.0, amd, 0.0001, "3 cpx* servers -> amd64");
+        assertEquals(1.0, arm, 0.0001, "1 cax* server -> arm64");
+        assertEquals(0.0, unknown, 0.0001,
+                "no unrecognised serverType -> the unknown bucket must be set to 0, not left stale");
     }
 
     /**
@@ -168,5 +205,26 @@ class HetznerMetricsRefresherTest {
         s.setStatus(status);
         s.setName("hcloud-mock-" + System.nanoTime());
         return s;
+    }
+
+    private static ServerDetail serverWithType(String serverTypeName) {
+        ServerDetail s = serverWithStatus("running");
+        ServerType st = new ServerType();
+        st.setName(serverTypeName);
+        s.setServerType(st);
+        return s;
+    }
+
+    /**
+     * Read the running-servers gauge regardless of how many arch buckets it
+     * is split across. Used by tests that care about the cloud-wide total
+     * but not the per-arch breakdown.
+     */
+    private static double sumRunningAcrossArchs(String cloudName) {
+        double sum = 0;
+        for (String arch : HetznerMetricProvider.KNOWN_ARCHS) {
+            sum += HetznerMetricProvider.RUNNING_SERVERS.labels(cloudName, arch).get();
+        }
+        return sum;
     }
 }

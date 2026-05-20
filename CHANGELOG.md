@@ -2,6 +2,30 @@
 
 All notable Percona patches to [hetzner-cloud-plugin](https://github.com/jenkinsci/hetzner-cloud-plugin) are documented here.
 
+## v103.percona.23 (2026-05-20)
+
+Adds an `arch` label (`amd64` / `arm64` / `unknown`) to the two Hetzner-side metrics that carry per-server context, so the Grafana dashboard can split worker activity by CPU architecture. The Hetzner serverType naming convention is unambiguous: `cpx*` / `cx*` / `ccx*` are AMD64, `cax*` is ARM64. Everything else collapses to `unknown` so cardinality stays bounded if Hetzner adds a new SKU prefix.
+
+### Added
+
+- `HetznerMetricProvider.archOf(String serverType)` public helper plus the `ARCH_AMD64` / `ARCH_ARM64` / `ARCH_UNKNOWN` constants and a `KNOWN_ARCHS` list. Used by call sites that need to clear stale series (set 0 for archs that drop to zero so the gauge does not pin at its last non-zero value in Mimir).
+
+### Changed
+
+- `hetzner_running_servers` gains an `arch` label. `HetznerCloud.runningNodeCount()` groups VMs by arch from `ServerDetail.getServerType().getName()`, emits one row per arch in `KNOWN_ARCHS`, and explicitly sets 0 for archs with no running servers in the current pass.
+- `hetzner_orphan_servers_reaped_total` gains an `arch` label. `OrphanedNodesCleaner.terminateOrphanedServer` derives the arch from the doomed server's `serverType` at reap time.
+
+### Out of scope
+
+- `hetzner_provisioning_pending` stays cloud-only. Its backing state is a single `AtomicInteger` per cloud (`HetznerCloud.pendingProvisions`); splitting it by arch would require refactoring every provision-lifecycle code path (`provision()`, `provisionCompleted()`, `NodeCallable`) and threading an arch through the completion path. Tracked for a follow-up.
+- `hetzner_instance_cap` stays cloud-only. The cap is a single configured value per cloud with no per-arch decomposition; emitting it as `cloud="x",arch="amd64"=50,cloud="x",arch="arm64"=50` would be semantically wrong (a sum would double the real cap).
+
+### Compatibility
+
+- Dashboards using `sum by(cloud)` or `sum without(arch)` over the relabelled metrics keep working unchanged; the arch dimension collapses cleanly at query time.
+- Dashboards using raw selectors (`hetzner_running_servers{cloud="..."}`) will now match multiple series (one per arch). The Percona dashboard at `resources/addons/grafana/dashboards/hetzner-plugin.json` already aggregates via `sum by(master)` so no panel breakage is expected.
+- Mimir cardinality impact: 10 masters × 3 archs (effective 2) for the two metrics = ~20-30 extra active series. Negligible against the baseline.
+
 ## v103.percona.22 (2026-05-19)
 
 Phase 4b of the ps3 canary resilience plan ([PS-11173](https://perconadev.atlassian.net/browse/PS-11173)). After a master JVM restart, the plugin now re-adopts the master's own Hetzner VMs as Jenkins agents via Hetzner label selector, instead of letting `OrphanedNodesCleaner` reap them. This closes the failure class where every in-flight build was lost on a kill -9 / spot interrupt even though the Hetzner VMs themselves had survived. ps3-only canary; default-off on every other master.

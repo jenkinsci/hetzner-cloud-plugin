@@ -157,12 +157,28 @@ public class HetznerCloud extends AbstractCloudImpl {
         // gauge for a few minutes during an outage is more useful than a
         // gap that breaks alerts. Persistent staleness is detectable as a
         // flat-line on the dashboard.
-        int count = Ints.checkedCast(getResourceManager().fetchAllServers(name)
+        //
+        // v23+: group running VMs by arch (cpx* -> amd64, cax* -> arm64,
+        // unknown SKU -> unknown). Every entry in KNOWN_ARCHS is emitted
+        // even when its count is zero; otherwise an arch that drops from
+        // N to 0 would keep its stale series in Mimir at the last-known
+        // non-zero value, breaking ratio panels and alerts. The dimension
+        // is collapsible at query time (sum by(cloud)) so pre-v23
+        // dashboards keep working unchanged.
+        java.util.Map<String, Long> byArch = getResourceManager().fetchAllServers(name)
                 .stream()
                 .filter(sd -> HetznerConstants.RUNNABLE_STATE_SET.contains(sd.getStatus()))
-                .count());
-        HetznerMetricProvider.RUNNING_SERVERS.labels(name).set(count);
-        return count;
+                .collect(java.util.stream.Collectors.groupingBy(
+                        sd -> HetznerMetricProvider.archOf(
+                                sd.getServerType() != null ? sd.getServerType().getName() : null),
+                        java.util.stream.Collectors.counting()));
+        int total = 0;
+        for (String arch : HetznerMetricProvider.KNOWN_ARCHS) {
+            long c = byArch.getOrDefault(arch, 0L);
+            HetznerMetricProvider.RUNNING_SERVERS.labels(name, arch).set(c);
+            total += Ints.checkedCast(c);
+        }
+        return total;
     }
 
     /**

@@ -52,11 +52,18 @@ public final class HetznerMetricProvider {
             .labelNames("cloud")
             .register();
 
-    /** Current Hetzner-side running VM count for this cloud (per Hetzner API). */
+    /**
+     * Current Hetzner-side running VM count for this cloud (per Hetzner API),
+     * split by CPU architecture. The {@code arch} label is one of
+     * {@link #ARCH_AMD64}, {@link #ARCH_ARM64}, {@link #ARCH_UNKNOWN};
+     * see {@link #archOf(String)}. Sum across {@code arch} reproduces the
+     * pre-v23 per-cloud total, so dashboards using {@code sum by(cloud)}
+     * or {@code sum without(arch)} remain backward compatible.
+     */
     public static final Gauge RUNNING_SERVERS = Gauge.build()
             .name("hetzner_running_servers")
-            .help("Current count of running Hetzner VMs visible to this cloud")
-            .labelNames("cloud")
+            .help("Current count of running Hetzner VMs visible to this cloud, split by arch")
+            .labelNames("cloud", "arch")
             .register();
 
     /** Configured {@code instanceCapStr} for this cloud. */
@@ -395,10 +402,16 @@ public final class HetznerMetricProvider {
     // Orphan / ghost cleanup
     // =====================================================================
 
+    /**
+     * Hetzner-side orphan VMs (no Jenkins peer) destroyed by
+     * OrphanedNodesCleaner, split by CPU architecture. The {@code arch}
+     * label is one of {@link #ARCH_AMD64}, {@link #ARCH_ARM64},
+     * {@link #ARCH_UNKNOWN}; see {@link #archOf(String)}.
+     */
     public static final Counter ORPHAN_REAPED = Counter.build()
             .name("hetzner_orphan_servers_reaped_total")
-            .help("Hetzner-side orphan VMs (no Jenkins peer) destroyed by OrphanedNodesCleaner")
-            .labelNames("cloud")
+            .help("Hetzner-side orphan VMs (no Jenkins peer) destroyed by OrphanedNodesCleaner, split by arch")
+            .labelNames("cloud", "arch")
             .register();
 
     public static final Counter GHOST_REMOVED = Counter.build()
@@ -736,6 +749,53 @@ public final class HetznerMetricProvider {
             ec2 = System.getProperty("ec2.instance.type", "unknown");
         }
         RUNTIME_INFO.labels(osName, osArch, osVersion, javaVersion, sanitize(ec2)).set(1);
+    }
+
+    // =====================================================================
+    // Architecture label (v103.percona.23+)
+    //
+    // Hetzner server-type prefixes are unambiguous: cpx* / cx* / ccx* are
+    // AMD64 (Intel/EPYC); cax* is ARM64 (Ampere). The plugin emits these
+    // as the {@code arch} label on metrics that carry per-server context
+    // (RUNNING_SERVERS, ORPHAN_REAPED). Other Hetzner-side cloud-aggregate
+    // gauges (PROVISIONING_PENDING, INSTANCE_CAP) stay arch-blind because
+    // their underlying state (AtomicInteger, single configured cap) has
+    // no per-arch decomposition.
+    // =====================================================================
+
+    public static final String ARCH_AMD64 = "amd64";
+    public static final String ARCH_ARM64 = "arm64";
+    /** Catch-all for new or unrecognised Hetzner SKUs. */
+    public static final String ARCH_UNKNOWN = "unknown";
+
+    /**
+     * Stable enumeration of arch label values the plugin emits. Used by
+     * callers that need to clear stale series (e.g. when an arch drops to
+     * zero, the gauge must be explicitly set to 0 rather than left at its
+     * last value).
+     */
+    public static final java.util.List<String> KNOWN_ARCHS = java.util.List.of(
+            ARCH_AMD64, ARCH_ARM64, ARCH_UNKNOWN);
+
+    /**
+     * Map a Hetzner server-type identifier ({@code cpx42}, {@code cax31},
+     * ...) to its CPU architecture label. Null / empty / unrecognised
+     * input maps to {@link #ARCH_UNKNOWN} so the cardinality stays bounded
+     * even if Hetzner introduces a new SKU prefix the plugin does not yet
+     * recognise.
+     */
+    public static String archOf(String serverType) {
+        if (serverType == null || serverType.isEmpty()) {
+            return ARCH_UNKNOWN;
+        }
+        String s = serverType.toLowerCase();
+        if (s.startsWith("cax")) {
+            return ARCH_ARM64;
+        }
+        if (s.startsWith("cpx") || s.startsWith("cx") || s.startsWith("ccx")) {
+            return ARCH_AMD64;
+        }
+        return ARCH_UNKNOWN;
     }
 
     /**
