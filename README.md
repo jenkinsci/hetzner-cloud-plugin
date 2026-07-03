@@ -116,7 +116,7 @@ Following attributes are **required** for each server template:
   Either case, image **must have JRE already installed**.
 - `Server type` - type of server
 
-- `Location` - this could be either datacenter name or location name. Distinction is made using presence of character `-` in value, which is meant for datacenter.
+- `Location` - The name of location. Please note that datacenter name is no longer [supported per change in cloud](https://docs.hetzner.cloud/changelog#2026-07).
 
 These additional attributes can be specified, but are not required:
 

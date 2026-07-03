@@ -16,7 +16,7 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.ClientFactory;
-import cloud.dnation.hetznerclient.GetDatacentersResponse;
+
 import cloud.dnation.hetznerclient.GetFirewallByIdResponse;
 import cloud.dnation.hetznerclient.GetFirewallsBySelectorResponse;
 import cloud.dnation.hetznerclient.GetImageByIdResponse;
@@ -42,15 +42,15 @@ import java.util.Arrays;
 @Slf4j
 public class ConfigurationValidator {
     /**
-     * Simple validation of credentialsId. This is implemented by listing all datacenters.
+     * Simple validation of credentialsId. This is implemented by listing all locations.
      *
      * @param credentialsId credentialsId used for client connection
      * @return ValidationResult
      */
     static ValidationResult validateCloudConfig(String credentialsId) {
         return validateWithClient(api -> {
-            final GetDatacentersResponse result = api.getAllDatacenters().execute().body();
-            Preconditions.checkArgument(!result.getDatacenters().isEmpty(), "Expected some data");
+            final GetLocationsResponse result = api.getAllLocations(0, 1).execute().body();
+            Preconditions.checkArgument(!result.getLocations().isEmpty(), "Expected some data");
             return ValidationResult.OK;
         }, credentialsId);
     }
@@ -69,28 +69,6 @@ public class ConfigurationValidator {
         } catch (Exception e) {
             return ValidationResult.fromException(e);
         }
-    }
-
-    /**
-     * Attempt to validate provided string as valid name of datacenter.
-     *
-     * @param datacenter    name of datacenter to validate.
-     * @param credentialsId credentialsId used for client connection
-     * @return ValidationResult representing result
-     */
-    static ValidationResult validateDatacenter(String datacenter, String credentialsId) {
-        if (Strings.isNullOrEmpty(datacenter)) {
-            return new ValidationResult(false, "Datacenter is empty");
-        }
-        return validateWithClient(api -> {
-            final GetDatacentersResponse result = api.getAllDatacentersWithName(datacenter)
-                    .execute().body();
-            Preconditions.checkArgument(result.getDatacenters().size() == 1,
-                    "Expected exactly one result, got %s", result.getDatacenters().size());
-            return new ValidationResult(true, "Found: " +
-                    result.getDatacenters().get(0).getDescription());
-
-        }, credentialsId);
     }
 
     /**
@@ -215,9 +193,6 @@ public class ConfigurationValidator {
     static ValidationResult verifyLocation(String location, String credentialsId) {
         if (Strings.isNullOrEmpty(location)) {
             return new ValidationResult(false, "Location is empty");
-        }
-        if (location.contains("-")) {
-            return validateDatacenter(location, credentialsId);
         }
         return validateWithClient(api -> {
             final GetLocationsResponse result = api.getAllLocationsWithName(location).execute().body();

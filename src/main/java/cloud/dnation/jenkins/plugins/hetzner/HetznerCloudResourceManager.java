@@ -393,11 +393,7 @@ public class HetznerCloudResourceManager {
             createServerRequest.setImage(imageId);
             createServerRequest.setName(agent.getNodeName());
             createServerRequest.setSshKeys(Collections.singletonList(sshKey.getName()));
-            if (agent.getTemplate().getLocation().contains("-")) {
-                createServerRequest.setDatacenter(agent.getTemplate().getLocation());
-            } else {
-                createServerRequest.setLocation(agent.getTemplate().getLocation());
-            }
+            createServerRequest.setLocation(agent.getTemplate().getLocation());
             createServerRequest.setLabels(createLabelsForServer(agent.getTemplate().getCloud().name));
             if (ct == ConnectivityType.BOTH || ct == ConnectivityType.PUBLIC_V6 || ct == ConnectivityType.PUBLIC) {
                 Optional.of(agent.getTemplate().getPrimaryIp()).ifPresent(ip -> ip.apply(proxy(), createServerRequest));
