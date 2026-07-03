@@ -76,18 +76,6 @@
                         </tr>
                     </j:when>
                 </j:choose>
-                <tr>
-                    <th>Datacenter</th>
-                    <td>${instance.datacenter.name}</td>
-                </tr>
-                <tr>
-                    <th>Location</th>
-                    <td>${instance.datacenter.location.description}</td>
-                </tr>
-                <tr>
-                    <th>City</th>
-                    <td>${instance.datacenter.location.city}</td>
-                </tr>
             </table>
         </j:otherwise>
     </j:choose>
