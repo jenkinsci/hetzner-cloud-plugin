@@ -37,7 +37,7 @@ import jenkins.model.Jenkins;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
 import org.jenkinsci.plugins.cloudstats.TrackedPlannedNode;
 import org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl;
