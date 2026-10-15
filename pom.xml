@@ -138,7 +138,7 @@
         <dependency>
             <groupId>cloud.dnation.integration</groupId>
             <artifactId>hetzner-cloud-client-java</artifactId>
-            <version>1.13.0</version>
+            <version>1.14.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.github.spotbugs</groupId>
