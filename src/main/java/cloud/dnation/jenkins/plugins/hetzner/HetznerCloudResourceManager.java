@@ -16,6 +16,8 @@
 package cloud.dnation.jenkins.plugins.hetzner;
 
 import cloud.dnation.hetznerclient.AbstractSearchResponse;
+import cloud.dnation.hetznerclient.ActionDetail;
+import cloud.dnation.hetznerclient.ActionResponse;
 import cloud.dnation.hetznerclient.ClientFactory;
 import cloud.dnation.hetznerclient.CreateServerFirewallsRequest;
 import cloud.dnation.hetznerclient.CreateServerRequest;
@@ -184,6 +186,39 @@ public class HetznerCloudResourceManager {
     }
 
     /**
+     * Poll a Hetzner action until it reaches a terminal state ("success" or "error").
+     *
+     * @param actionId      the action ID to poll
+     * @param timeoutMillis maximum time to wait before giving up
+     * @param intervalMillis time between polls
+     * @return the final {@link ActionDetail}
+     * @throws IOException           if an API call fails
+     * @throws IllegalStateException if the action finished with status "error"
+     *                               or did not complete within the timeout
+     */
+    public ActionDetail waitForAction(long actionId, long timeoutMillis, long intervalMillis)
+            throws IOException, InterruptedException {
+        final long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            final Response<ActionResponse> response = proxy().getActionById(actionId).execute();
+            final ActionDetail action = assertValidResponse(response, ActionResponse::getAction);
+            final String status = action.getStatus();
+            if ("success".equals(status)) {
+                return action;
+            }
+            if ("error".equals(status)) {
+                String errorMsg = action.getError() != null ? action.getError().getMessage() : "unknown";
+                throw new IllegalStateException(
+                        String.format("Hetzner action %d failed: %s", actionId, errorMsg));
+            }
+            log.debug("Action {} progress: {}%, status: {}", actionId, action.getProgress(), status);
+            Thread.sleep(intervalMillis);
+        }
+        throw new IllegalStateException(
+                String.format("Hetzner action %d did not complete within %d ms", actionId, timeoutMillis));
+    }
+
+    /**
      * Destroy server.
      *
      * @param server server instance to remove from cloud
@@ -192,41 +227,20 @@ public class HetznerCloudResourceManager {
         final long serverId = server.getId();
         final HetznerApi client = proxy();
         try {
-            // Initiate server power off
-            assertValidResponse(client.powerOffServer(serverId).execute());
-            log.info("Power off initiated for server with ID = {}, waiting for shutdown...", serverId);
+            final Response<ActionResponse> powerOffResponse = client.powerOffServer(serverId).execute();
+            final ActionDetail powerOffAction = assertValidResponse(powerOffResponse, ActionResponse::getAction);
+            log.info("Power off initiated for server with ID = {} (action {}), waiting for completion...",
+                    serverId, powerOffAction.getId());
 
-            // Wait for server to be fully powered off
-            boolean isShutdown = false;
-            int attempts = 0;
-            final int maxAttempts = 60; // Maximum wait time: 60 * 5s = 300s (5 minutes)
-
-            while (!isShutdown && attempts < maxAttempts) {
-                attempts++;
-                try {
-                    Thread.sleep(5000); // Wait 5 seconds between checks
-
-                    Response<GetServerByIdResponse> response = client.getServer(serverId).execute();
-                    if (response.isSuccessful() && response.body() != null
-                            && response.body().getServer() != null) {
-                        ServerDetail currentState = response.body().getServer();
-                        if ("off".equals(currentState.getStatus())) {
-                            isShutdown = true;
-                            log.info("Server with ID = {} is now powered off, proceeding with deletion", serverId);
-                        } else {
-                            log.debug("Server with ID = {} is still in '{}' status, waiting...",
-                                    serverId, currentState.getStatus());
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.warn("Interrupted while waiting for server shutdown", e);
-                    break;
-                }
-            }
-
-            if (!isShutdown) {
-                log.warn("Server with ID = {} did not power off within expected time, proceeding with deletion anyway", serverId);
+            try {
+                waitForAction(powerOffAction.getId(), 300_000, 5_000);
+                log.info("Server with ID = {} is now powered off, proceeding with deletion", serverId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for server {} shutdown", serverId);
+            } catch (IllegalStateException e) {
+                log.warn("Power-off action for server {} did not complete cleanly, proceeding with deletion anyway: {}",
+                        serverId, e.getMessage());
             }
 
             // Delete the server
@@ -416,7 +430,9 @@ public class HetznerCloudResourceManager {
                                 createServerResponse.code(), errorCode, errorBody));
             }
             final HetznerServerInfo info = new HetznerServerInfo(sshKey);
+            final CreateServerResponse body = createServerResponse.body();
             info.setServerDetail(assertValidResponse(createServerResponse, CreateServerResponse::getServer));
+            info.setCreateAction(body.getAction());
             return info;
         } catch (IOException e) {
             throw new IllegalStateException(e);
