@@ -15,6 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.hetznerclient.ActionDetail;
 import cloud.dnation.hetznerclient.ServerDetail;
 import cloud.dnation.hetznerclient.SshKeyDetail;
 import lombok.Data;
@@ -23,4 +24,5 @@ import lombok.Data;
 public class HetznerServerInfo {
     private final SshKeyDetail sshKeyDetail;
     private ServerDetail serverDetail;
+    private ActionDetail createAction;
 }

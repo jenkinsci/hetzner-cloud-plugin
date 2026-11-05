@@ -15,6 +15,7 @@
  */
 package cloud.dnation.jenkins.plugins.hetzner;
 
+import cloud.dnation.hetznerclient.ActionDetail;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Uninterruptibles;
 import hudson.model.Computer;
@@ -42,21 +43,22 @@ class NodeCallable implements Callable<Node> {
         final HetznerServerInfo serverInfo = cloud.getResourceManager().createServer(agent);
         agent.setServerInstance(serverInfo);
         final String serverName = serverInfo.getServerDetail().getName();
-        boolean running = false;
-        final int bootDeadline = agent.getTemplate().getBootDeadline();
-        //wait for status == "running", but at most 15 minutes
-        final WaitStrategy waitStrategy = new WaitStrategy(bootDeadline, 45, 15);
-        while (!waitStrategy.isDeadLineOver()) {
-            waitStrategy.waitNext();
-            if (agent.isAlive()) {
-                log.info("Server '{}' is now running, waiting 10 seconds before proceeding", serverName);
-                Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
-                running = true;
-                break;
-            }
-        }
-        Preconditions.checkState(running, "Server '%s' didn't start after 15 minutes, giving up",
-                serverName);
+        final int bootDeadlineMinutes = agent.getTemplate().getBootDeadline();
+        final ActionDetail createAction = serverInfo.getCreateAction();
+        Preconditions.checkState(createAction != null,
+                "Server '%s' was created but no action was returned by the API", serverName);
+        log.info("Server '{}' created (action {}), waiting for provisioning to complete", serverName, createAction.getId());
+        cloud.getResourceManager().waitForAction(createAction.getId(),
+                bootDeadlineMinutes * 60L * 1000L, 15_000);
+        cloud.getResourceManager().refreshServerInfo(serverInfo);
+        Preconditions.checkState(
+                serverInfo.getServerDetail() != null
+                        && "running".equals(serverInfo.getServerDetail().getStatus()),
+                "Server '%s' action completed but server is not running (status: %s)",
+                serverName,
+                serverInfo.getServerDetail() != null ? serverInfo.getServerDetail().getStatus() : "null");
+        log.info("Server '{}' is now running, waiting 10 seconds before proceeding", serverName);
+        Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
         Jenkins.get().addNode(agent);
         computer = agent.toComputer();
         int retry = 5;
@@ -81,33 +83,5 @@ class NodeCallable implements Callable<Node> {
         }
 
         return agent;
-    }
-
-    private static final class WaitStrategy {
-        private final int firstInterval;
-        private final int subsequentIntervals;
-        private final long deadlineNanos;
-        private boolean first = true;
-
-        private WaitStrategy(int deadlineMinutes, int firstInterval, int subsequentIntervals) {
-            deadlineNanos = System.nanoTime() + deadlineMinutes * 60L * 1_000_000_000L;
-            this.firstInterval = firstInterval;
-            this.subsequentIntervals = subsequentIntervals;
-        }
-
-        boolean isDeadLineOver() {
-            return System.nanoTime() > deadlineNanos;
-        }
-
-        void waitNext() {
-            final int waitSeconds;
-            if (first) {
-                first = false;
-                waitSeconds = firstInterval;
-            } else {
-                waitSeconds = subsequentIntervals;
-            }
-            Uninterruptibles.sleepUninterruptibly(waitSeconds, TimeUnit.SECONDS);
-        }
     }
 }
