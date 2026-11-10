@@ -19,7 +19,9 @@ import cloud.dnation.jenkins.plugins.hetzner.Messages;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Descriptor;
+import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.CloudRetentionStrategy;
+import hudson.slaves.RetentionStrategy;
 import lombok.Getter;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -32,6 +34,16 @@ public class IdlePeriodPolicy extends AbstractShutdownPolicy {
     public IdlePeriodPolicy(int idleMinutes) {
         super(new CloudRetentionStrategy(idleMinutes));
         this.idleMinutes = idleMinutes;
+    }
+
+    /**
+     * The strategy held by the parent class is transient, so it is {@code null} once the policy
+     * has been loaded from disk. Build it from the persisted {@code idleMinutes} instead.
+     */
+    @SuppressWarnings("rawtypes")
+    @Override
+    public RetentionStrategy<AbstractCloudComputer> getRetentionStrategy() {
+        return new CloudRetentionStrategy(idleMinutes);
     }
 
     @Extension
