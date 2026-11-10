@@ -20,9 +20,17 @@ import cloud.dnation.hetznerclient.ServerDetail;
 import cloud.dnation.hetznerclient.SshKeyDetail;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 public class HetznerServerInfo {
     private final SshKeyDetail sshKeyDetail;
     private ServerDetail serverDetail;
     private ActionDetail createAction;
+    /**
+     * Follow-up actions returned by the create call (e.g. start_server, attach_to_network).
+     * The server is only running once these have completed as well.
+     */
+    private List<ActionDetail> nextActions = new ArrayList<>();
 }
