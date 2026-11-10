@@ -53,6 +53,7 @@ import retrofit2.Call;
 import retrofit2.Response;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -433,6 +434,9 @@ public class HetznerCloudResourceManager {
             final CreateServerResponse body = createServerResponse.body();
             info.setServerDetail(assertValidResponse(createServerResponse, CreateServerResponse::getServer));
             info.setCreateAction(body.getAction());
+            if (body.getNextActions() != null) {
+                info.setNextActions(new ArrayList<>(body.getNextActions()));
+            }
             return info;
         } catch (IOException e) {
             throw new IllegalStateException(e);

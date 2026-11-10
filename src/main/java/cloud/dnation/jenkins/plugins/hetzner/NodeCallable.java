@@ -24,9 +24,12 @@ import jenkins.model.Jenkins;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -47,16 +50,21 @@ class NodeCallable implements Callable<Node> {
         final ActionDetail createAction = serverInfo.getCreateAction();
         Preconditions.checkState(createAction != null,
                 "Server '%s' was created but no action was returned by the API", serverName);
-        log.info("Server '{}' created (action {}), waiting for provisioning to complete", serverName, createAction.getId());
-        cloud.getResourceManager().waitForAction(createAction.getId(),
-                bootDeadlineMinutes * 60L * 1000L, 15_000);
+        final long deadline = System.currentTimeMillis() + bootDeadlineMinutes * 60L * 1000L;
+        final List<ActionDetail> actions = new ArrayList<>();
+        actions.add(createAction);
+        actions.addAll(serverInfo.getNextActions());
+        log.info("Server '{}' created, waiting for actions {} to complete", serverName,
+                actions.stream().map(a -> a.getCommand() + "#" + a.getId()).collect(Collectors.toList()));
+        // create_server succeeds as soon as the server exists; start_server (and network
+        // attachments) are separate follow-up actions returned in next_actions.
+        for (ActionDetail action : actions) {
+            cloud.getResourceManager().waitForAction(action.getId(), remaining(deadline), 5_000);
+        }
         cloud.getResourceManager().refreshServerInfo(serverInfo);
-        Preconditions.checkState(
-                serverInfo.getServerDetail() != null
-                        && "running".equals(serverInfo.getServerDetail().getStatus()),
-                "Server '%s' action completed but server is not running (status: %s)",
-                serverName,
-                serverInfo.getServerDetail() != null ? serverInfo.getServerDetail().getStatus() : "null");
+        final String status = serverInfo.getServerDetail() != null ? serverInfo.getServerDetail().getStatus() : null;
+        Preconditions.checkState("running".equals(status),
+                "Server '%s' actions completed but server is not running (status: %s)", serverName, status);
         log.info("Server '{}' is now running, waiting 10 seconds before proceeding", serverName);
         Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
         Jenkins.get().addNode(agent);
@@ -83,5 +91,9 @@ class NodeCallable implements Callable<Node> {
         }
 
         return agent;
+    }
+
+    private static long remaining(long deadline) {
+        return Math.max(0, deadline - System.currentTimeMillis());
     }
 }
