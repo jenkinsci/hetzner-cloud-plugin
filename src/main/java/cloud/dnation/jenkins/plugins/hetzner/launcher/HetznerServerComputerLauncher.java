@@ -171,7 +171,14 @@ public class HetznerServerComputerLauncher extends ComputerLauncher {
                     throw new AbortException("Authentication failed");
                 }
             } catch (IOException e) {
-                logger.error("Connection to " + ipv4 + " failed. Will wait 10 seconds before retry", e);
+                if (retries == 0) {
+                    logger.error("Connection to " + ipv4 + " failed, no retries left", e);
+                    break;
+                }
+                // Expected while the server is still booting (sshd not up yet), so don't log a stack trace.
+                logger.info("Connection to " + ipv4 + " failed (" + e.getMessage()
+                        + "), server may still be booting. Will wait 10 seconds before retry ("
+                        + retries + " retries left)");
                 Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
             }
         }
