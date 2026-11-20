@@ -18,6 +18,7 @@ package cloud.dnation.jenkins.plugins.hetzner;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
@@ -55,6 +56,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -65,6 +68,12 @@ public class HetznerCloud extends AbstractCloudImpl {
     private List<HetznerServerTemplate> serverTemplates;
     @Getter
     private transient HetznerCloudResourceManager resourceManager;
+    /**
+     * Servers ordered by this loop whose {@code createServer} call has not returned yet, and which
+     * are therefore absent from {@link #runningNodeCount()}. Creation is submitted to a thread pool
+     * (see {@link NodeCallable}), so without this the loop races its own orders. See issue #85.
+     */
+    private transient AtomicInteger pendingProvisions;
 
     @DataBoundConstructor
     public HetznerCloud(String name, String credentialsId, String instanceCapStr,
@@ -96,8 +105,13 @@ public class HetznerCloud extends AbstractCloudImpl {
         readResolve();
     }
 
+    private AtomicInteger pending() {
+        return pendingProvisions;
+    }
+
     protected Object readResolve() {
         resourceManager = HetznerCloudResourceManager.create(credentialsId);
+        pendingProvisions = new AtomicInteger();
         if (serverTemplates == null) {
             setServerTemplates(Collections.emptyList());
         }
@@ -116,6 +130,42 @@ public class HetznerCloud extends AbstractCloudImpl {
                 .count());
     }
 
+    /**
+     * Compare-and-set rather than read-then-increment, because concurrent {@code provision()} calls
+     * otherwise all observe the same free capacity and each take it.
+     */
+    private boolean reserveSlot(int instanceCap, int running) {
+        while (true) {
+            final int inFlight = pending().get();
+            if (running + inFlight >= instanceCap) {
+                return false;
+            }
+            if (pending().compareAndSet(inFlight, inFlight + 1)) {
+                return true;
+            }
+        }
+    }
+
+    /**
+     * The reservation lasts only until {@code createServer} returns, at which point the server is in
+     * the list {@link #runningNodeCount()} reads. Holding it for the whole launch would count every
+     * booting machine twice and halve the usable cap.
+     */
+    private Runnable slotRelease() {
+        final AtomicBoolean released = new AtomicBoolean();
+        final AtomicInteger counter = pending();
+        return () -> {
+            if (released.compareAndSet(false, true)) {
+                counter.decrementAndGet();
+            }
+        };
+    }
+
+    @VisibleForTesting
+    int getPendingProvisions() {
+        return pending().get();
+    }
+
     @Override
     public Collection<PlannedNode> provision(CloudState state, int excessWorkload) {
         log.debug("provision(cloud={},label={},excessWorkload={})", name, state.getLabel(), excessWorkload);
@@ -131,27 +181,34 @@ public class HetznerCloud extends AbstractCloudImpl {
                 }
                 int running = runningNodeCount();
                 int instanceCap = getInstanceCap();
-                int available = instanceCap - running;
                 final HetznerServerTemplate template = pickTemplate(matchingTemplates);
-                log.info("Creating new agent with {} executors, have {} running VMs", template.getNumExecutors(), running);
-                if (available <= 0) {
-                    log.warn("Cloud capacity reached ({}). Has {} VMs running, but want {} more executors",
-                            instanceCap, running , excessWorkload);
+                if (!reserveSlot(instanceCap, running)) {
+                    log.warn("Cloud capacity reached ({}). Has {} VMs running and {} being created, "
+                                    + "but want {} more executors",
+                            instanceCap, running, pending().get(), excessWorkload);
                     break;
                 } else {
+                    log.info("Creating new agent with {} executors, have {} running VMs and {} being created",
+                            template.getNumExecutors(), running, pending().get());
                     final String serverName = template.generateNodeName();
                     final ProvisioningActivity.Id provisioningId = new ProvisioningActivity.Id(name, template.getName(),
                             serverName);
-                    final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
-                    agent.setMode(template.getMode());
-                    plannedNodes.add(new TrackedPlannedNode(
-                                    provisioningId,
-                                    agent.getNumExecutors(),
-                                    Computer.threadPoolForRemoting.submit(new NodeCallable(agent, this)
-                                    )
-                            )
-                    );
-                    excessWorkload -= agent.getNumExecutors();
+                    final Runnable release = slotRelease();
+                    try {
+                        final HetznerServerAgent agent = template.createAgent(provisioningId, serverName);
+                        agent.setMode(template.getMode());
+                        plannedNodes.add(new TrackedPlannedNode(
+                                        provisioningId,
+                                        agent.getNumExecutors(),
+                                        Computer.threadPoolForRemoting.submit(
+                                                new NodeCallable(agent, this, release))
+                                )
+                        );
+                        excessWorkload -= agent.getNumExecutors();
+                    } catch (RuntimeException | IOException | Descriptor.FormException e) {
+                        release.run();
+                        throw e;
+                    }
                 }
             }
 

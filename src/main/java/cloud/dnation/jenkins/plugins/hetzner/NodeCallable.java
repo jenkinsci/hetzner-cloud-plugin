@@ -36,14 +36,20 @@ import java.util.stream.Collectors;
 class NodeCallable implements Callable<Node> {
     private final HetznerServerAgent agent;
     private final HetznerCloud cloud;
+    private final Runnable creationFinished;
 
     @Override
     public Node call() throws Exception {
         Computer computer = agent.getComputer();
-        if (computer != null && computer.isOnline()) {
-            return agent;
+        final HetznerServerInfo serverInfo;
+        try {
+            if (computer != null && computer.isOnline()) {
+                return agent;
+            }
+            serverInfo = cloud.getResourceManager().createServer(agent);
+        } finally {
+            creationFinished.run();
         }
-        final HetznerServerInfo serverInfo = cloud.getResourceManager().createServer(agent);
         agent.setServerInstance(serverInfo);
         final String serverName = serverInfo.getServerDetail().getName();
         final int bootDeadlineMinutes = agent.getTemplate().getBootDeadline();
